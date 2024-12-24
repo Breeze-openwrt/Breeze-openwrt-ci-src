@@ -341,6 +341,7 @@ CONFIG_KERNEL_NET_L3_MASTER_DEV=y
 # CONFIG_KERNEL_PAGE_POOL is not set
 CONFIG_KERNEL_MPTCP=y
 CONFIG_KERNEL_MPTCP_IPV6=y
+CONFIG_KERNEL_NF_CONNTRACK_TIMEOUT=y
 # CONFIG_KERNEL_IP_PNP is not set
 # CONFIG_KERNEL_BTRFS_FS is not set
 
@@ -1878,6 +1879,7 @@ CONFIG_PACKAGE_libiwinfo-data=y
 # CONFIG_PACKAGE_ipq-wifi-redmi_ax6 is not set
 # CONFIG_PACKAGE_ipq-wifi-skspruce_wia3300-20 is not set
 # CONFIG_PACKAGE_ipq-wifi-spectrum_sax1v1k is not set
+# CONFIG_PACKAGE_ipq-wifi-tplink_eap620hd-v1 is not set
 # CONFIG_PACKAGE_ipq-wifi-tplink_eap660hd-v1 is not set
 # CONFIG_PACKAGE_ipq-wifi-wallys_dr40x9 is not set
 # CONFIG_PACKAGE_ipq-wifi-xiaomi_ax1800 is not set
@@ -2054,6 +2056,7 @@ CONFIG_PACKAGE_libiwinfo-data=y
 # CONFIG_PACKAGE_mt7622bt-firmware is not set
 # CONFIG_PACKAGE_mt7921bt-firmware is not set
 # CONFIG_PACKAGE_mt7922bt-firmware is not set
+# CONFIG_PACKAGE_mt7925bt-firmware is not set
 # CONFIG_PACKAGE_mt7981-wo-firmware is not set
 # CONFIG_PACKAGE_mt7986-wo-firmware is not set
 # CONFIG_PACKAGE_mt7988-2p5g-phy-firmware is not set
@@ -2260,7 +2263,7 @@ CONFIG_PACKAGE_kmod-crypto-sha1=y
 CONFIG_PACKAGE_kmod-crypto-sha256=y
 CONFIG_PACKAGE_kmod-crypto-sha3=y
 CONFIG_PACKAGE_kmod-crypto-sha512=y
-CONFIG_PACKAGE_kmod-crypto-test=y
+# CONFIG_PACKAGE_kmod-crypto-test is not set
 CONFIG_PACKAGE_kmod-crypto-user=y
 CONFIG_PACKAGE_kmod-crypto-xcbc=y
 CONFIG_PACKAGE_kmod-crypto-xts=y
@@ -2612,6 +2615,8 @@ CONFIG_PACKAGE_kmod-nf-reject6=y
 CONFIG_PACKAGE_kmod-nf-socket=y
 CONFIG_PACKAGE_kmod-nf-tproxy=y
 CONFIG_PACKAGE_kmod-nfnetlink=y
+# CONFIG_PACKAGE_kmod-nfnetlink-cthelper is not set
+# CONFIG_PACKAGE_kmod-nfnetlink-cttimeout is not set
 CONFIG_PACKAGE_kmod-nfnetlink-log=y
 CONFIG_PACKAGE_kmod-nfnetlink-queue=y
 CONFIG_PACKAGE_kmod-nft-arp=y
@@ -7406,7 +7411,10 @@ CONFIG_PACKAGE_ttyd=y
 # CONFIG_PACKAGE_colrm is not set
 # CONFIG_PACKAGE_conmon is not set
 # CONFIG_PACKAGE_containerd is not set
-# CONFIG_PACKAGE_coremark is not set
+CONFIG_PACKAGE_coremark=y
+CONFIG_COREMARK_OPTIMIZE_O3=y
+CONFIG_COREMARK_ENABLE_MULTITHREADING=y
+CONFIG_COREMARK_NUMBER_OF_THREADS=16
 CONFIG_PACKAGE_coreutils=y
 # CONFIG_PACKAGE_coreutils-b2sum is not set
 # CONFIG_PACKAGE_coreutils-base32 is not set
