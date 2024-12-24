@@ -2615,8 +2615,8 @@ CONFIG_PACKAGE_kmod-nf-reject6=y
 CONFIG_PACKAGE_kmod-nf-socket=y
 CONFIG_PACKAGE_kmod-nf-tproxy=y
 CONFIG_PACKAGE_kmod-nfnetlink=y
-# CONFIG_PACKAGE_kmod-nfnetlink-cthelper is not set
-# CONFIG_PACKAGE_kmod-nfnetlink-cttimeout is not set
+CONFIG_PACKAGE_kmod-nfnetlink-cthelper=y
+CONFIG_PACKAGE_kmod-nfnetlink-cttimeout=y
 CONFIG_PACKAGE_kmod-nfnetlink-log=y
 CONFIG_PACKAGE_kmod-nfnetlink-queue=y
 CONFIG_PACKAGE_kmod-nft-arp=y
@@ -2678,7 +2678,7 @@ CONFIG_PACKAGE_kmod-dsa-tag-dsa=y
 CONFIG_PACKAGE_kmod-ifb=y
 # CONFIG_PACKAGE_kmod-igb is not set
 # CONFIG_PACKAGE_kmod-igc is not set
-# CONFIG_PACKAGE_kmod-ipvlan is not set
+CONFIG_PACKAGE_kmod-ipvlan=y
 # CONFIG_PACKAGE_kmod-ixgbe is not set
 # CONFIG_PACKAGE_kmod-ixgbevf is not set
 # CONFIG_PACKAGE_kmod-lan743x is not set
@@ -5175,7 +5175,7 @@ CONFIG_PACKAGE_luci-ssl-openssl=y
 #
 CONFIG_PACKAGE_luci-base=y
 # CONFIG_LUCI_SRCDIET is not set
-CONFIG_LUCI_JSMIN=y
+# CONFIG_LUCI_JSMIN is not set
 # CONFIG_LUCI_CSSTIDY is not set
 
 #
