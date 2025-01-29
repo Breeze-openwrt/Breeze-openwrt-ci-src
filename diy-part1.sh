@@ -27,4 +27,4 @@ echo "src-git mihomo https://github.com/morytyann/OpenWrt-mihomo.git;main" >> "f
 echo "src-git-full luci_app_xray https://github.com/yichya/luci-app-xray" >> "feeds.conf.default"
 
 # add passwall2
-echo "src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;main" >> "feeds.conf.default"
+# echo "src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;main" >> "feeds.conf.default"
