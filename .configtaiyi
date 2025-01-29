@@ -489,7 +489,6 @@ CONFIG_FEED_routing=y
 CONFIG_FEED_telephony=y
 CONFIG_FEED_video=y
 CONFIG_FEED_mihomo=y
-CONFIG_FEED_luci_app_xray=y
 
 #
 # Base system
@@ -1834,21 +1833,6 @@ CONFIG_PACKAGE_cpufreq=y
 # CONFIG_PACKAGE_jose is not set
 CONFIG_PACKAGE_libiwinfo-data=y
 # CONFIG_PACKAGE_libjose is not set
-CONFIG_PACKAGE_luci-app-xray=y
-
-#
-# luci-app-xray Configuration
-#
-CONFIG_PACKAGE_XRAY_INCLUDE_CLOUDFLARE_ORIGIN_ROOT_CA=y
-CONFIG_PACKAGE_XRAY_RLIMIT_NOFILE_LARGE=y
-# CONFIG_PACKAGE_XRAY_RESTART_DNSMASQ_ON_IFACE_CHANGE is not set
-# CONFIG_PACKAGE_XRAY_IGNORE_TP_SPEC_DEF_GW is not set
-CONFIG_PACKAGE_XRAY_RLIMIT_DATA_UNLIMITED=y
-# CONFIG_PACKAGE_XRAY_RLIMIT_DATA_SMALL is not set
-# CONFIG_PACKAGE_XRAY_RLIMIT_DATA_LARGE is not set
-# end of luci-app-xray Configuration
-
-CONFIG_PACKAGE_luci-app-xray-status=y
 # CONFIG_PACKAGE_tang is not set
 # end of Extra packages
 
