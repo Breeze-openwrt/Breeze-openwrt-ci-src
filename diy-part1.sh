@@ -28,3 +28,6 @@ echo "src-git mihomo https://github.com/morytyann/OpenWrt-mihomo.git;main" >> "f
 
 # add passwall2
 # echo "src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;main" >> "feeds.conf.default"
+
+# add tcp_brutal
+src-git tcp_brutal https://github.com/Breeze-openwrt/openwrt-tcp-brutal.git;master
