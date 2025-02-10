@@ -20,8 +20,8 @@
 #echo "src-git mihomo https://github.com/morytyann/OpenWrt-mihomo.git;main" >> "feeds.conf.default"
 
 
-# add OpenWrt-mihomo
-echo "src-git mihomo https://github.com/morytyann/OpenWrt-mihomo.git;main" >> "feeds.conf.default"
+# add feed
+echo "src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main" >> "feeds.conf.default"
 
 # add luci app xray
 # echo "src-git-full luci_app_xray https://github.com/yichya/luci-app-xray" >> "feeds.conf.default"
