@@ -89,6 +89,9 @@ jobs:
           libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
           vim wget xmlto xxd zlib1g-dev python3-setuptools
 
+          sudo apt install -y dejagnu expect libltdl-dev libltdl7 libtext-unidecode-perl libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl sgml-base tcl-expect tcl8.6 tex-common texinfo
+          sudo apt install -y libffi-dev
+          sudo apt install -y dejagnu expect libltdl-dev libltdl7 libtext-unidecode-perl libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl sgml-base tcl-expect tcl8.6 tex-common texinfo
 
           sudo -E apt-get -qq install mkisofs wodim cdrkit-doc libfido2-dev
           sudo -E apt update -y
