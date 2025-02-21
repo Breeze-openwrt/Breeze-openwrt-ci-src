@@ -74,6 +74,17 @@ jobs:
           sudo apt-get update --fix-missing -y
           sudo apt-get upgrade -y
 
+          sudo -E apt -yqq update
+          sudo -E apt -yqq full-upgrade
+          sudo -E apt -yqq autoremove --purge
+          sudo -E apt -yqq autoclean
+          sudo -E apt -yqq clean
+          sudo -E apt -yqq install dos2unix libfuse-dev
+          sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+          
+          sudo apt update -y
+          sudo apt install -y build-essential python3-dev libffi-dev rustc cargo ghc libffi-dev node-gyp golang cmake swig pybind11-dev openjdk-11-jdk ghc ruby-dev luajit luarocks libgmp-dev
+          
           sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           sudo -E apt-get -y install   dos2unix
           
