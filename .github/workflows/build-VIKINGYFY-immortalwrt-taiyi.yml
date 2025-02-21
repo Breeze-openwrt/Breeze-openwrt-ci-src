@@ -83,7 +83,13 @@ jobs:
           sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           
           sudo apt update -y
-          sudo apt install -y build-essential python3-dev libffi-dev rustc cargo ghc libffi-dev node-gyp golang cmake swig pybind11-dev openjdk-11-jdk ghc ruby-dev luajit luarocks libgmp-dev
+          sudo apt install -y node-mkdirp node-nopt node-tar node-which
+          sudo apt --fix-broken install -y
+          sudo apt-get install -y --reinstall node-gyp
+          sudo apt clean -y
+          sudo apt update -y
+          sudo apt install -y node-gyp
+          sudo apt install -y build-essential python3-dev libffi-dev rustc cargo ghc node-gyp golang cmake swig pybind11-dev openjdk-11-jdk ruby-dev luajit luarocks libgmp-dev
           
           sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           sudo -E apt-get -y install   dos2unix
