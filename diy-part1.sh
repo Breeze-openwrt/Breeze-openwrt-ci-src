@@ -29,5 +29,5 @@ echo "src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main" >>
 # add passwall2
 # echo "src-git passwall2 https://github.com/xiaorouji/openwrt-passwall2.git;main" >> "feeds.conf.default"
 
-# add tcp_brutal
-echo "src-git tcp_brutal https://github.com/Breeze-openwrt/openwrt-tcp-brutal.git;master" >> "feeds.conf.default"
+# add lucky
+echo "src-git lucky https://github.com/gdy666/luci-app-lucky.git;main" >> "feeds.conf.default"
