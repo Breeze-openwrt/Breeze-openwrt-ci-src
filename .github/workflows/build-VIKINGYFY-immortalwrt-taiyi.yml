@@ -20,8 +20,8 @@ on:
         default: "false"
 
 env:
-  REPO_URL: https://github.com/Breeze-openwrt/VIKINGYFY-immortalwrt.git
-  REPO_BRANCH: 6.6.90-20250524
+  REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
+  REPO_BRANCH: main
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: .configtaiyi
   DIY_P1_SH: diy-part1.sh
