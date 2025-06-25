@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build VIKINGYFY-immortalwrt
+name: Build VIKINGYFY-immortalwrt yashe
 
 on:
   repository_dispatch:
@@ -23,7 +23,7 @@ env:
   REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
   REPO_BRANCH: main
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: .config
+  CONFIG_FILE: .configyashe
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
   UPLOAD_BIN_DIR: true
@@ -46,7 +46,7 @@ jobs:
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
-          tool-cache: false
+          tool-cache: true
 
           # all of these default to true, but feel free to set to
           # "false" if necessary for your workflow
@@ -61,7 +61,7 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android
 
           sudo -E apt-get -qq update
           sudo -E apt-get -qq update
@@ -74,6 +74,19 @@ jobs:
           sudo apt-get update --fix-missing -y
           sudo apt-get upgrade -y
 
+          sudo -E apt -yqq update
+          sudo -E apt -yqq full-upgrade
+          sudo -E apt -yqq autoremove --purge
+          sudo -E apt -yqq autoclean
+          sudo -E apt -yqq clean
+          sudo -E apt -yqq install dos2unix libfuse-dev
+          sudo bash -c 'bash <(curl -sL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+          
+          sudo apt update -y
+          sudo apt clean -y
+          sudo apt update -y
+          sudo apt install -y build-essential python3-dev libffi-dev rustc cargo ghc golang cmake swig pybind11-dev openjdk-11-jdk ruby-dev luajit luarocks libgmp-dev
+          
           sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
           sudo -E apt-get -y install   dos2unix
           
@@ -89,6 +102,9 @@ jobs:
           libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
           vim wget xmlto xxd zlib1g-dev python3-setuptools
 
+          sudo apt install -y dejagnu expect libltdl-dev libltdl7 libtext-unidecode-perl libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl sgml-base tcl-expect tcl8.6 tex-common texinfo
+          sudo apt install -y libffi-dev
+          sudo apt install -y dejagnu expect libltdl-dev libltdl7 libtext-unidecode-perl libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl sgml-base tcl-expect tcl8.6 tex-common texinfo
 
           sudo -E apt-get -qq install mkisofs wodim cdrkit-doc libfido2-dev
           sudo -E apt update -y
@@ -97,8 +113,7 @@ jobs:
           sudo -E apt full-upgrade -y
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
-
-
+          sudo apt-get install build-essential gcc g++ make ncurses-dev zlib1g-dev
           sudo -E apt-get -qq update
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
@@ -217,7 +232,7 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload firmware to release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2.3.2
         if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,14 +244,14 @@ jobs:
       - name: Delete workflow runs
         uses: GitRML/delete-workflow-runs@main
         with:
-          retain_days: 1
-          keep_minimum_runs: 5
+          retain_days: 5
+          keep_minimum_runs: 25
 
       - name: Remove old Releases
-        uses: dev-drprasad/delete-older-releases@v0.2.0
+        uses: dev-drprasad/delete-older-releases@v0.3.4
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         with:
-          keep_latest: 40
+          keep_latest: 10
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
