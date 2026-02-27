@@ -1,0 +1,318 @@
+#
+# Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+# https://github.com/P3TERX/Actions-OpenWrt
+# Description: Build OpenWrt using GitHub Actions
+#
+# -----------------------------------------------------------------------------
+# 🌟 源码阅读与设计赏析：这是一份“豪华前台点单式”编译流水线配置！
+#    【作者意图】：为了不破坏原有的文件，我们新建了它。并赋予了它【互动式】的生命！
+#    【核心黑科技 - `workflow_dispatch: inputs`】：
+#         我们将网页上的手动触发按钮做了魔改，给你加上了“勾选菜单”。
+#         想煮哪口锅的饭（Yashe 还是 Taiyi），你自己勾选，下面的流程就能像听话的厨子一样：
+#         勾了谁，就启动哪套图纸(.config)下载和编译；都勾了体验双倍快乐，不勾选的地方直接被 `if:` 魔法跳掉省电！
+# -----------------------------------------------------------------------------
+
+name: ✨ Build ALL Optional (Yashe & Taiyi) # 🏷️ 给这份新工作流起个闪亮的名字，好在 Actions 列表区分
+
+on:
+  repository_dispatch:
+  workflow_dispatch: # 🖱️ 用户手动触发环节
+    inputs: # 👇 重点来了！这里定义了弹出的菜单问卷！
+      build_yashe:
+        description: "🔥 是否编译 Yashe 固件？ (打个勾表示 Yes)" # 给普通玩家看的大白话说明
+        required: true    # 这道题必须回答！
+        type: boolean     # 答案类型：对错题（也就是网页上会渲染成一个打钩的小框框）
+        default: true     # 默认建议勾上
+      build_taiyi:
+        description: "🔥 是否编译 Taiyi 固件？ (打个勾表示 Yes)"
+        required: true
+        type: boolean
+        default: true
+      ssh:
+        description: "🔧 如果卡住了，开不开内网穿透(SSH)去调试？(true开/false关)"
+        required: false
+        default: "false"
+
+env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多常用的常量封印到这）
+  REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
+  REPO_BRANCH: main
+  FEEDS_CONF: feeds.conf.default
+  # 我们这里删掉了固定的 CONFIG_FILE，因为下面会根据你打钩的情况给系统智能派发
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  UPLOAD_BIN_DIR: true    # 📤 是否把全量的碎片化 `.ipk` 零件也包圆带走？
+  UPLOAD_FIRMWARE: true   # 📤 是否把能刷机的核心精髓固件输出发布？
+  UPLOAD_COWTRANSFER: false
+  UPLOAD_WETRANSFER: false
+  UPLOAD_RELEASE: true    # 🚀 是否最后光荣挂榜（生成 Release 展示下载页面）
+  TZ: Asia/Shanghai       # 🕰️ 对时准星校对！防止你生成的发布因为美国时间导致记录错乱
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04 # 🖥️ 我们云端的干活肉鸡（底层环境），自带 2 核 CPU。
+
+    steps:
+      - name: Checkout # 1️⃣：下发检出指令，去咱们的库房把上面的那些自定义脚本全拖到肉机里来
+        uses: actions/checkout@main
+
+      - name: Free Disk Space (Ubuntu) # 2️⃣：强力拆迁队打扫战场。删掉虚拟机自带但咱们不用的杂物腾出空间！
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true       # 拆除安卓厂房
+          dotnet: true        # 拆除C#厂房
+          haskell: true       # 拆除Haskell厂房
+          large-packages: true
+          docker-images: true # 把多余的集装箱清空
+          swap-storage: true
+
+      - name: Initialization environment # 3️⃣：熬底汤 - 装载海量交叉编译需要的支持库（这是在装车间机器）
+        env:
+          DEBIAN_FRONTEND: noninteractive # 🤖【机器人模式光环】: 有任何弹窗问“是/否”一律默认执行免卡死模式！
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android
+
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq update
+          sudo apt update -y
+          sudo apt full-upgrade -y
+          sudo apt upgrade -y
+          sudo apt-get update
+
+          sudo apt-get update --fix-missing -y
+          sudo apt-get upgrade -y
+
+          sudo -E apt -yqq update
+          sudo -E apt -yqq full-upgrade
+          sudo -E apt -yqq autoremove --purge
+          sudo -E apt -yqq autoclean
+          sudo -E apt -yqq clean
+          sudo -E apt -yqq install dos2unix libfuse-dev
+          
+          sudo apt update -y
+          sudo apt clean -y
+          sudo apt update -y
+          sudo apt install -y build-essential python3-dev libffi-dev rustc cargo ghc golang cmake swig pybind11-dev openjdk-11-jdk ruby-dev luajit luarocks libgmp-dev
+          
+          sudo -E apt-get -y install   dos2unix
+          sudo apt-get install -y clang
+          sudo apt-get install -y libpcre2-dev libpcre3-dev
+
+          sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
+          git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+          libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
+          mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
+          libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
+          vim wget xmlto xxd zlib1g-dev python3-setuptools
+
+          sudo apt update -y
+          sudo apt full-upgrade -y
+          sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
+            g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev \
+            libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
+            python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
+            upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
+
+          sudo apt install -y dejagnu expect libltdl-dev libltdl7 libtext-unidecode-perl libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl sgml-base tcl-expect tcl8.6 tex-common texinfo
+          sudo apt install -y libffi-dev
+          sudo apt install -y dejagnu expect libltdl-dev libltdl7 libtext-unidecode-perl libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl sgml-base tcl-expect tcl8.6 tex-common texinfo
+
+          sudo -E apt-get -qq install mkisofs wodim cdrkit-doc libfido2-dev
+          sudo -E apt update -y
+          sudo -E apt full-upgrade -y
+          sudo -E apt update -y
+          sudo -E apt full-upgrade -y
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          sudo apt-get install build-essential gcc g++ make ncurses-dev zlib1g-dev
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          
+          # 校准电脑内时间
+          sudo timedatectl set-timezone "$TZ"
+          # 圈个地：这里以后就是干脏活的工作区
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
+
+      - name: Clone source code # 4️⃣：去把 OpenWrt 的源代码大库房全须全根拉过来
+        working-directory: /workdir
+        run: |
+          df -hT $PWD
+          git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Load custom feeds # 5️⃣：导入个人定制的商店源连接
+        run: |
+          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+          chmod +x $DIY_P1_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P1_SH
+
+      - name: Update feeds # 6️⃣：让库房向外网商店下达目录更新请求
+        run: cd openwrt && ./scripts/feeds update -a
+
+      - name: Install feeds # 7️⃣：把我们订阅的所有小插件的目录都安装落户过来
+        run: cd openwrt && ./scripts/feeds install -a
+
+      - name: Load custom configuration # 8️⃣：上自己的“微调小特权”
+        run: |
+          [ -e files ] && mv files openwrt/files
+          chmod +x $DIY_P2_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P2_SH
+
+      - name: SSH connection to Actions
+        uses: P3TERX/ssh2actions@v1.0.0
+        if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+        env:
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+      # ================== 👇 核心高能区域：买菜洗菜环节 ==================
+      - name: Prepare & Download (Yashe) # 🛒 检测：如果是点单选了 Yashe，那就按照它的菜单出击采购！
+        id: package_yashe
+        if: ${{ github.event.inputs.build_yashe == 'true' }} # 🪄 【If魔法】必须打勾，否则不执行
+        run: |
+          cd openwrt
+          cp $GITHUB_WORKSPACE/.configyashe .config
+          make defconfig
+          make download -j8
+          find dl -size -1024c -exec ls -l {} \;
+          find dl -size -1024c -exec rm -f {} \;
+          
+      - name: Prepare & Download (Taiyi) # 🛒 检测：如果是选了 Taiyi，我们把特需它的零件给去下载回来！
+        id: package_taiyi
+        if: ${{ github.event.inputs.build_taiyi == 'true' }} # 🪄 【If魔法】必须打勾，否则不执行
+        run: |
+          cd openwrt
+          cp $GITHUB_WORKSPACE/.configtaiyi .config
+          make defconfig
+          make download -j8
+          find dl -size -1024c -exec ls -l {} \;
+          find dl -size -1024c -exec rm -f {} \;
+
+      # ================== 👇 核心火力烹饪环节 ==================
+      - name: Compile the Yashe firmware # 🍳 Yashe 开煮！
+        id: compile_yashe
+        if: ${{ github.event.inputs.build_yashe == 'true' }} # 只会在你勾选后启动
+        run: |
+          cd openwrt
+          cp $GITHUB_WORKSPACE/.configyashe .config
+          make defconfig
+          echo -e "全线满载！启动 $(nproc) 线程全力铸造 Yashe 固件..."
+          make -j$(nproc) || make -j$(nproc) || make -j$(nproc) || make -j1 || make -j1 || make -j1 V=s
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Compile the Taiyi firmware # 🍳 Taiyi 开煮！如果我们上面全勾选，这波因为蹭了饭（环境共用），它将光速完工！
+        id: compile_taiyi
+        if: ${{ github.event.inputs.build_taiyi == 'true' }} # 只会在你勾选后启动
+        run: |
+          cd openwrt
+          cp $GITHUB_WORKSPACE/.configtaiyi .config
+          make defconfig
+          echo -e "全线满载！启动 $(nproc) 线程全力铸造 Taiyi 固件..."
+          make -j$(nproc) || make -j$(nproc) || make -j$(nproc) || make -j1 || make -j1 || make -j1 V=s
+
+          # 【统一打时间戳标记】 因为这是有可能运行的最后一步编译
+          echo "status=success" >> $GITHUB_OUTPUT
+      
+      - name: Generate timestamp
+        # 不属于单一固件，不管你怎么点单，都得标记个出生证时间
+        if: (!cancelled())
+        run: |
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+      - name: Check space usage
+        if: (!cancelled())
+        run: df -hT
+
+      - name: Upload bin directory # 📦 收废品（收集所有安装包）
+        uses: actions/upload-artifact@main
+        # 只要你勾选的任一主线跑成功了我们都吸，防断连
+        if: (steps.compile_yashe.outputs.status == 'success' || steps.compile_taiyi.outputs.status == 'success') && env.UPLOAD_BIN_DIR == 'true'
+        with:
+          name: OpenWrt_bin${{ env.FILE_DATE }}
+          path: openwrt/bin
+
+      - name: Organize ALL output files # 🧲 万磁王：全范围收割成品刷机包。哪怕只有一个，或者有两个，统统搬走。
+        id: organize
+        if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/firmware
+          # 这里用通配符 `*` 可以把你之前成功编译的所有固件一锅端
+          cp -r openwrt/bin/targets/*/*/*.* $GITHUB_WORKSPACE/firmware/ 2>/dev/null || true
+          rm -rf $GITHUB_WORKSPACE/firmware/packages
+          echo "FIRMWARE=$GITHUB_WORKSPACE/firmware" >> $GITHUB_ENV
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware directory # 📦 【内部发货】 发送到 GitHub 的后台缓存构件中心去
+        uses: actions/upload-artifact@main
+        if: steps.organize.outputs.status == 'success' && !cancelled()
+        with:
+          name: OpenWrt_Custom_firmware_Package${{ env.FILE_DATE }}
+          path: ${{ env.FIRMWARE }}
+
+      # ==== 一堆网盘推送的小开关 （当前默认屏蔽，如果你不想白白耗费免费云电脑流量不用管）====
+      - name: Upload firmware to cowtransfer
+        id: cowtransfer
+        if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
+        run: |
+          curl -fsSL git.io/file-transfer | sh
+          ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
+          echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
+          echo "url=$(cat cowtransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware to WeTransfer
+        id: wetransfer
+        if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true' && !cancelled()
+        run: |
+          curl -fsSL git.io/file-transfer | sh
+          ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
+          echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
+          echo "url=$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
+
+      - name: Generate release tag # 🏷️ 制作闪亮的门面发布标签
+        id: tag
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        run: |
+          echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+          touch release.txt
+          echo "🎉 新鲜出炉的 OpenWrt 专有编译固件发行版！您可以根据需求挑选心仪的设备固件哦。 " >> release.txt
+          [ $UPLOAD_COWTRANSFER = true ] && echo "🔗 [Cowtransfer](${{ steps.cowtransfer.outputs.url }})" >> release.txt
+          [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware to release # 🚀 光年发射：一揽子打成 zip 安装包推送到了明面上，让大家看到大成果！
+        uses: softprops/action-gh-release@v2.3.2
+        if: steps.tag.outputs.status == 'success' && !cancelled()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          body_path: release.txt
+          files: ${{ env.FIRMWARE }}/*
+
+      - name: Delete workflow runs # 清洁大妈1
+        uses: GitRML/delete-workflow-runs@main
+        with:
+          retain_days: 5
+          keep_minimum_runs: 25
+
+      - name: Remove old Releases # 清洁大妈2
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        with:
+          keep_latest: 10
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
