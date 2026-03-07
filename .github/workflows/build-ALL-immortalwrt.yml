@@ -312,14 +312,14 @@ jobs:
       - name: Delete workflow runs # 清洁大妈1
         uses: GitRML/delete-workflow-runs@main
         with:
-          retain_days: 5
-          keep_minimum_runs: 25
+          retain_days: 15
+          keep_minimum_runs: 35
 
       - name: Remove old Releases # 清洁大妈2
         uses: dev-drprasad/delete-older-releases@v0.3.4
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         with:
-          keep_latest: 10
+          keep_latest: 20
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
