@@ -5,9 +5,10 @@
 
 ## 🛠️ 修改细节清单
 
-### 1. 强力适配 Node.js 24
+### 1. 强力适配 Node.js 24 (深度修正版)
 - 涉及文件：所有 7 个 `.yml` 工作流文件。
-- 关键改动：注入 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`。
+- 关键改动：将 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` 从全局 `env` 搬迁至 **Job 级别的 `env`**。
+- 理由：经实测与调研，Job 级别的环境变量对于 GitHub Actions 运行器的覆盖力更强，能确保每个步骤都强制运行在 Node 24 兼容层上，从而彻底消灭弃用警告。
 
 ### 2. Action 版本大升级
 - `softprops/action-gh-release`: 统一升级至最新的 `@v2` 分支。

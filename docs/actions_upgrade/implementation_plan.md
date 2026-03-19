@@ -21,8 +21,10 @@
 - `build-breeze303-openwrt.yml`
 
 #### [MODIFY] 所有工作流文件
-1. **全局环境变量设置**：
-   在 `env:` 区块中添加 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`。
+1. **Job 环境变量设置**：
+   在每个工作的 `jobs.<job_id>.env:` 区块中添加 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`。
+   > [!NOTE]
+   > 某些 Actions 运行器对 Job 内部的变量感应更灵敏，这能确保每个任务步骤都强制使用 Node 24 引擎。
 2. **Action 版本更新**：
    - 将 `softprops/action-gh-release@v1` 或 `@v2.3.2` 统一修改为 `softprops/action-gh-release@v2`。
    - 将 `dev-drprasad/delete-older-releases@v0.2.0` 统一修改为 `dev-drprasad/delete-older-releases@v0.3.4`。

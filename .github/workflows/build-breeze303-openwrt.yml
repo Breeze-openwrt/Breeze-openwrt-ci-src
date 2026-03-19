@@ -32,12 +32,12 @@ env:
   UPLOAD_WETRANSFER: false
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  # 🚀 【Node.js 24 引擎开关】：提前迁移环境，无视 Deprecated 警告
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env: # 🏢 Job 层级变量：直接在本工作中强制开启 Node 24 强力引擎
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout
@@ -229,7 +229,8 @@ jobs:
           body_path: release.txt
           files: ${{ env.FIRMWARE }}/*
 
-      - name: Delete workflow runs
+      - name: Delete workflow runs # 记录清道夫
+        # 使用最新的 main 分支并在 Node 24 环境下平稳运行
         uses: GitRML/delete-workflow-runs@main
         with:
           retain_days: 1

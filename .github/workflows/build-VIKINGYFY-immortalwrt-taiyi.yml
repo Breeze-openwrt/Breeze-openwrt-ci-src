@@ -32,16 +32,12 @@ env:
   UPLOAD_WETRANSFER: false
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  # -----------------------------------------------------------------------------
-  # 🚀 【前瞻性补丁】：开启 Node.js 24 强力引擎
-  # -----------------------------------------------------------------------------
-  # 【小白科普】：通过设置这个环境开关，我们提前让 GitHub 使用最新的 Node.js 24
-  # 来运行这些自动化脚本。这不仅能消灭弃用警告，还能让你的流水线在未来几年都稳如泰山。
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env: # 🏢 Job 层级变量：直接在本工作中强制开启 Node 24 强力引擎
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout
@@ -260,7 +256,8 @@ jobs:
           body_path: release.txt
           files: ${{ env.FIRMWARE }}/*
 
-      - name: Delete workflow runs
+      - name: Delete workflow runs # 自动化记录扫除
+        # 使用最新的 main 分支，确保在 Node 24 下依然健壮
         uses: GitRML/delete-workflow-runs@main
         with:
           retain_days: 5
