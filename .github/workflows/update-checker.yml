@@ -12,8 +12,10 @@
 name: Update Checker
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt
   REPO_BRANCH: openwrt-22.03
+  # 🚀 【前瞻性补丁】：提前适配 Node.js 24，消除弃用警告
+  # 让这个检查脚本也能跑在最新的引擎之上！
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   workflow_dispatch:

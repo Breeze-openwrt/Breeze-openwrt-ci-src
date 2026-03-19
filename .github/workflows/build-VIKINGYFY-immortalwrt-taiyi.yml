@@ -32,6 +32,12 @@ env:
   UPLOAD_WETRANSFER: false
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
+  # -----------------------------------------------------------------------------
+  # 🚀 【前瞻性补丁】：开启 Node.js 24 强力引擎
+  # -----------------------------------------------------------------------------
+  # 【小白科普】：通过设置这个环境开关，我们提前让 GitHub 使用最新的 Node.js 24
+  # 来运行这些自动化脚本。这不仅能消灭弃用警告，还能让你的流水线在未来几年都稳如泰山。
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -243,8 +249,9 @@ jobs:
           [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware to release
-        uses: softprops/action-gh-release@v2.3.2
+      - name: Upload firmware to release # 🚀 成果挂榜
+        # 升级至 @v2 稳定版，完美适配 Node 24 引擎
+        uses: softprops/action-gh-release@v2
         if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -259,11 +266,12 @@ jobs:
           retain_days: 5
           keep_minimum_runs: 25
 
-      - name: Remove old Releases
+      - name: Remove old Releases # 定期大扫除
+        # 锁定 v0.3.4，配合 Node 24 环境变量，实现“老树发新芽”，继续稳定清扫旧 release
         uses: dev-drprasad/delete-older-releases@v0.3.4
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         with:
-          keep_latest: 10
+          keep_latest: 10 # 🍱 保留 10 个最近的精品版本
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

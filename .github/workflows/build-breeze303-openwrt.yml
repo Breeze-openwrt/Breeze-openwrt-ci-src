@@ -32,6 +32,8 @@ env:
   UPLOAD_WETRANSFER: false
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
+  # 🚀 【Node.js 24 引擎开关】：提前迁移环境，无视 Deprecated 警告
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -216,8 +218,9 @@ jobs:
           [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware to release
-        uses: softprops/action-gh-release@v1
+      - name: Upload firmware to release # 🚀 成果挂榜
+        # 升级至 @v2，支持云端最新 Node.js 24 引擎
+        uses: softprops/action-gh-release@v2
         if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -232,11 +235,12 @@ jobs:
           retain_days: 1
           keep_minimum_runs: 5
 
-      - name: Remove old Releases
-        uses: dev-drprasad/delete-older-releases@v0.2.0
+      - name: Remove old Releases # 定时大扫除
+        # 统一提升至 v0.3.4，完美适配 Node 24 运行环境
+        uses: dev-drprasad/delete-older-releases@v0.3.4
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         with:
-          keep_latest: 40
+          keep_latest: 40 # 🍱 仅保留 40 个历史版本
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

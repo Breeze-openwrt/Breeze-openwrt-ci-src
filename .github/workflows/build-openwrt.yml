@@ -32,6 +32,13 @@ env:
   UPLOAD_WETRANSFER: false
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
+  # -----------------------------------------------------------------------------
+  # 🚀 【环境升级补丁】：强制启用 Node.js 24 运行时
+  # -----------------------------------------------------------------------------
+  # 【小白科普】：我们要给这台云端电脑换个“更强劲的引擎”。
+  # Node.js 24 是未来的主流，开启它能解决 GitHub 的弃用警告，让脚本跑得更溜。
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # -----------------------------------------------------------------------------
 
 jobs:
   build:
@@ -213,8 +220,9 @@ jobs:
           [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware to release
-        uses: softprops/action-gh-release@v1
+      - name: Upload firmware to release # 🚀 成果发布到 GitHub Release
+        # 升级到 @v2 版本，拥抱 Node.js 24 引擎，告别过时警告
+        uses: softprops/action-gh-release@v2
         if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,11 +237,12 @@ jobs:
           retain_days: 1
           keep_minimum_runs: 5
 
-      - name: Remove old Releases
-        uses: dev-drprasad/delete-older-releases@v0.2.0
+      - name: Remove old Releases # 定时清理过旧的版本，保持仓库整洁
+        # 统一升级到 v0.3.4 强力稳定版
+        uses: dev-drprasad/delete-older-releases@v0.3.4
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         with:
-          keep_latest: 40
+          keep_latest: 40 # 🍱 存盘位：保留最近 40 个版本，再多的就自动清理掉
           delete_tags: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
