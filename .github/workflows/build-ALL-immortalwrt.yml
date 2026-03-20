@@ -253,8 +253,10 @@ jobs:
           echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           make defconfig
-          echo -e "全线满载！启动 $(nproc) 线程全力铸造 Yashe 固件..."
-          make -j$(nproc) || make -j$(nproc) || make -j$(nproc) || make -j1 || make -j1 || make -j1 V=s
+          echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程以榨干 CPU 物理算力全力铸造 Yashe 固件..."
+          # ✨ 性能狂魔极致榨干：由于 I/O 存在空窗期，$(nproc) + 1 能够让双核 CPU 永远处于满载不歇车状态。
+          # 🛡️ 引入断崖 Debug 机制：一旦因为代码报错，立刻切换单核带 V=s 详细日志跑一次就停，拒绝原来那种浪费几十倍时间的 6 连无脑重复试错！
+          make -j$(($(nproc) + 1)) || make -j1 V=s
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Compile the Taiyi firmware # 🍳 Taiyi 开煮！如果我们上面全勾选，这波因为蹭了饭（环境共用），它将光速完工！
@@ -267,8 +269,10 @@ jobs:
           echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           make defconfig
-          echo -e "全线满载！启动 $(nproc) 线程全力铸造 Taiyi 固件..."
-          make -j$(nproc) || make -j$(nproc) || make -j$(nproc) || make -j1 || make -j1 || make -j1 V=s
+          echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程以榨干 CPU 物理算力全力铸造 Taiyi 固件..."
+          # ✨ 性能狂魔极致榨干：由于 I/O 存在空窗期，$(nproc) + 1 能够让双核 CPU 永远处于满载不歇车状态。
+          # 🛡️ 引入断崖 Debug 机制：一旦因为代码报错，立刻切换单核带 V=s 详细日志跑一次就停，拒绝原来那种浪费几十倍时间的 6 连无脑重复试错！
+          make -j$(($(nproc) + 1)) || make -j1 V=s
 
           # 【统一打时间戳标记】 因为这是有可能运行的最后一步编译
           echo "status=success" >> $GITHUB_OUTPUT
