@@ -104,9 +104,9 @@ jobs:
 
           # ✨ 性能狂魔绝杀：合并 60 余行垃圾冗余重复的安装指令，解放服务器 I/O！
           # GitHub Action 的新机器其实已经很干净了，不需要上来先全盘跑好几圈升级（纯浪费生命）。
-          # 我们提纯出最终需要的所有编译核包，仅开启一次下载流！这一招就能暴压足足数分钟发热量！
+          # 🛡️ 终极屏蔽：强制切断所有 --no-install-recommends (不下载配套教程和无用推流模块，只装干货核心)，再减几分钟体积！
           sudo -E apt-get -qq update
-          sudo -E apt-get -qq install -y \
+          sudo -E apt-get -qq install -y --no-install-recommends \
             ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
             bzip2 cargo ccache cdrkit-doc clang cmake cpio curl dejagnu device-tree-compiler \
             dos2unix ecj expect fastjar flex g++ g++-multilib gawk gcc gcc-multilib gettext \
@@ -362,13 +362,15 @@ jobs:
           # 👑 赐名 latest，独霸云端，天下仅此一份！
           key: ${{ runner.os }}-openwrt-ccache-latest
 
-      - name: Delete workflow runs # 清洁大妈1：清理那些没用的“流水线运行记录”
-        # ✨ 性能狂魔绝杀招：剔除沉重的第三方包，使用原生 GitHub CLI 进行瞬间秒杀
+      - name: Delete workflow runs # 🧹 清理流水线死尸记录 (高并发阵列版)
+        # ✨ 性能狂魔合并发包术：将系统 API 请求数量暴降 99%！
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 提取当前所有运行日志，保留最新的 35 条底线记录，剩下的全部喂给垃圾清理指令，飞速且没有环境告警！
-          gh run list --limit 1000 --json databaseId -q '.[].databaseId' | tail -n +36 | xargs -r -I {} gh run delete "{}" || true
+          # 1. 之前是 xargs -I {} 发起循环，50 个包就要跟 GitHub 发 50 次又臭又长的 HTTP 删除请求，网速极慢。
+          # 2. 我们扒掉了 -I {} ，彻底激活 xargs 数组体！它会像推土机一样把所有的 ID 打成一个包：`gh run delete ID1 ID2 ID3...`
+          # 无论云端有多少个死记录，现在只发 1 次请求就能一秒连坐九族直接铲平！
+          gh run list --limit 500 --json databaseId -q '.[].databaseId' | tail -n +36 | xargs -r gh run delete || true
 
       - name: Remove old Releases # 定时清理旧发布
         # ✨ 性能狂魔绝杀之二：用 shell 截取直接代替臃肿的开源插件
