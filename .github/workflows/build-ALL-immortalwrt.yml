@@ -87,65 +87,27 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android
 
+          # ✨ 性能狂魔绝杀：合并 60 余行垃圾冗余重复的安装指令，解放服务器 I/O！
+          # GitHub Action 的新机器其实已经很干净了，不需要上来先全盘跑好几圈升级（纯浪费生命）。
+          # 我们提纯出最终需要的所有编译核包，仅开启一次下载流！这一招就能暴压足足数分钟发热量！
           sudo -E apt-get -qq update
-          sudo -E apt-get -qq update
-          sudo -E apt-get -qq update
-          sudo apt update -y
-          sudo apt full-upgrade -y
-          sudo apt upgrade -y
-          sudo apt-get update
-
-          sudo apt-get update --fix-missing -y
-          sudo apt-get upgrade -y
-
-          sudo -E apt -yqq update
-          sudo -E apt -yqq full-upgrade
-          sudo -E apt -yqq autoremove --purge
-          sudo -E apt -yqq autoclean
-          sudo -E apt -yqq clean
-          sudo -E apt -yqq install dos2unix libfuse-dev
+          sudo -E apt-get -qq install -y \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 cargo ccache cdrkit-doc clang cmake cpio curl dejagnu device-tree-compiler \
+            dos2unix ecj expect fastjar flex g++ g++-multilib gawk gcc gcc-multilib gettext \
+            ghc git golang gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 \
+            libelf-dev libfido2-dev libffi-dev libfuse-dev libglib2.0-dev libgmp-dev libgmp3-dev \
+            libltdl-dev libltdl7 libmpc-dev libmpfr-dev libncurses-dev libncurses5-dev \
+            libncursesw5-dev libpcre2-dev libpcre3-dev libpython3-dev libreadline-dev libssl-dev \
+            libtext-unidecode-perl libtool libxml-libxml-perl libxml-namespacesupport-perl \
+            libxml-sax-base-perl libxml-sax-perl libyaml-dev libz-dev lld llvm lrzsz luajit \
+            luarocks make mkisofs msmtp nano ncurses-dev ninja-build openjdk-11-jdk p7zip \
+            p7zip-full patch pkgconf pybind11-dev python2.7 python3 python3-dev python3-docutils \
+            python3-pip python3-ply python3-pyelftools python3-setuptools qemu-utils re2c rsync \
+            ruby-dev rustc scons sgml-base squashfs-tools subversion swig tcl-expect tcl8.6 \
+            tex-common texinfo uglifyjs unzip upx-ucl vim wget wodim xmlto xxd zlib1g-dev zstd
           
-          sudo apt update -y
-          sudo apt clean -y
-          sudo apt update -y
-          sudo apt install -y build-essential python3-dev libffi-dev rustc cargo ghc golang cmake swig pybind11-dev openjdk-11-jdk ruby-dev luajit luarocks libgmp-dev
-          
-          sudo -E apt-get -y install   dos2unix
-          sudo apt-get install -y clang
-          sudo apt-get install -y libpcre2-dev libpcre3-dev
-
-          sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-          bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
-          git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
-          libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
-          mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
-          libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
-          vim wget xmlto xxd zlib1g-dev python3-setuptools
-
-          sudo apt update -y
-          sudo apt full-upgrade -y
-          sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
-            g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev \
-            libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
-            libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
-            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
-            python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
-            upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
-
-          sudo apt install -y dejagnu expect libltdl-dev libltdl7 libtext-unidecode-perl libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl sgml-base tcl-expect tcl8.6 tex-common texinfo
-          sudo apt install -y libffi-dev
-          sudo apt install -y dejagnu expect libltdl-dev libltdl7 libtext-unidecode-perl libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl sgml-base tcl-expect tcl8.6 tex-common texinfo
-
-          sudo -E apt-get -qq install mkisofs wodim cdrkit-doc libfido2-dev
-          sudo -E apt update -y
-          sudo -E apt full-upgrade -y
-          sudo -E apt update -y
-          sudo -E apt full-upgrade -y
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
-          sudo apt-get install build-essential gcc g++ make ncurses-dev zlib1g-dev
-          sudo -E apt-get -qq update
+          # 清理一下安装产生的无用骨架碎片
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
           
@@ -188,6 +150,16 @@ jobs:
         env:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+      - name: Cache dl directory # 🧲 高级护城河：架设 GitHub Cache 拦截网！
+        # 这个动作是性能狂魔提速的关键。它会在“下载源码”前去高速云盘检查有没有存货。
+        # 如果有，一秒钟拉回几 GB 源码；如果没有，它会在今天跑完工作流后自动把下载好的包传到云盘，供明天秒拉！
+        uses: actions/cache@v3
+        with:
+          path: openwrt/dl
+          key: ${{ runner.os }}-openwrt-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-dl-
 
       # ================== 👇 核心高能区域：买菜洗菜环节 ==================
       - name: Prepare & Download (Yashe) # 🛒 检测：如果是点单选了 Yashe，那就按照它的菜单出击采购！
