@@ -332,6 +332,18 @@ jobs:
             ${{ env.FIRMWARE }}/*
           echo "🎉 终极发射圆满结束！所有卓越的交叉编译固件均已硬化在您的 Release 专属展区。"
 
+      - name: Show Ccache Statistics # 📊 验收大赏：查阅本次编译命中率！
+        if: always()
+        run: |
+          echo "========= Ccache 极限压榨金库战果 ========="
+          # 提取 OpenWrt 内部交叉编译好的原生宿主机 ccache 分析器，强制提取它刚才的所有拦截记录！
+          if [ -x "openwrt/staging_dir/host/bin/ccache" ]; then
+            env CCACHE_DIR=$GITHUB_WORKSPACE/openwrt/.ccache openwrt/staging_dir/host/bin/ccache -s
+          else
+            echo "⚠️ 未找到编译后内网的 ccache 面板（可能首轮大循环未构建成功）。"
+          fi
+          echo "================================================="
+
       - name: 🧹 Rebuild Ccache Throne # 🧹 为金库新王登基彻底清空王座！
         if: success()
         env:
