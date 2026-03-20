@@ -317,7 +317,8 @@ jobs:
         id: cowtransfer
         if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true'
         run: |
-          curl -fsSL git.io/file-transfer | sh
+          # 💣 彻底拔除官方已宣布死亡的 git.io 定时炸弹短链接，直连原生底层仓库代码库
+          curl -fsSL https://raw.githubusercontent.com/Mikubill/transfer/master/install.sh | sh
           ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
           echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
           echo "url=$(cat cowtransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
@@ -326,7 +327,8 @@ jobs:
         id: wetransfer
         if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true'
         run: |
-          curl -fsSL git.io/file-transfer | sh
+          # 💣 彻底拔除官方已宣布死亡的 git.io 定时炸弹短链接，直连原生底层仓库代码库
+          curl -fsSL https://raw.githubusercontent.com/Mikubill/transfer/master/install.sh | sh
           ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
           echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
           echo "url=$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
@@ -342,16 +344,18 @@ jobs:
           [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware to release # 🚀 光年发射
-        # 直接指定最新的社区版本 v2.6.1，实现 Node 24 上的狂飙
-        uses: softprops/action-gh-release@v2.6.1
+      - name: Upload firmware to release # 🚀 极速光年发射 (原生黑客版)
+        # ✨ 性能狂魔安全升级：彻底手刃由于第三方 NodeJS 插件带来的 0day 风险和加载速度拖慢，强制接入原生最高效的 OS 级骨干命令！
         if: steps.tag.outputs.status == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          body_path: release.txt
-          files: ${{ env.FIRMWARE }}/*
+        run: |
+          echo "🚀 启动 GitHub 原生核心引擎进行最终极的固件发版与全量部署..."
+          gh release create "${{ steps.tag.outputs.release_tag }}" \
+            --title "OpenWrt 纯净固件发行版 ${{ steps.tag.outputs.release_tag }}" \
+            --notes-file release.txt \
+            ${{ env.FIRMWARE }}/*
+          echo "🎉 终极发射圆满结束！所有卓越的交叉编译固件均已硬化在您的 Release 专属展区。"
 
       - name: 🧹 Rebuild Ccache Throne # 🧹 为金库新王登基彻底清空王座！
         if: success()
