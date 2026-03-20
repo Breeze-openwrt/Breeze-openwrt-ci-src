@@ -170,16 +170,14 @@ jobs:
               | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || echo "✨ ccache 缓存区清空完毕！"
           fi
 
-      - name: Cache Ccache directory # 🧲 C++ 编译碎片金库：极端白嫖秒杀方案！
-        uses: actions/cache@v5
+      - name: Restore Ccache directory # 🧲 C++ 编译碎片金库：尝试拉取老本！
+        # 🛡️ 只有当用户勾选了复用缓存时，我们才去云端尝试下载。否则直接全新开始！
+        if: github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == ''
+        uses: actions/cache/restore@v4
         with:
-          # 🐞 重大破案级修复：为什么之前 Ccache 始终只有下载缓存 dl 出去了，却死活没被打包储存？
-          #    原因：OpenWrt 原生并非把缓存存在电脑老家(~/)，而是保存在自己的肚子 `openwrt/.ccache` 目录里啦！
-          # 👉 所以之前找错了门，自然打包出来的就是空的。现在改对了路径，金库终于正式启动咯！
           path: openwrt/.ccache
-          key: ${{ runner.os }}-openwrt-ccache-${{ hashFiles('openwrt/feeds.conf.default') }}
-          restore-keys: |
-            ${{ runner.os }}-openwrt-ccache-
+          # 👑 我们彻底抛弃了乱码随机后缀，从此全服只有一个王储名字：latest
+          key: ${{ runner.os }}-openwrt-ccache-latest
 
       # ================== 👇 核心高能区域：买菜洗菜环节 ==================
       - name: Prepare & Download (Yashe) # 🛒 检测：如果是点单选了 Yashe，那就按照它的菜单出击采购！
@@ -319,21 +317,33 @@ jobs:
           body_path: release.txt
           files: ${{ env.FIRMWARE }}/*
 
-      - name: 🧹 Atomically Purge Old Caches # 🧹 原子性销毁旧缓存残留 (性能狂魔终极杀招)
-        # 🛡️ 只有在所有编译和上传都完全成功，确定云端即将生成新缓存时，才去消灭历史残余，保证绝对原子性和安全性！
+      - name: 🧹 Rebuild Ccache Throne # 🧹 为金库新王登基彻底清空王座！
         if: success()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CCACHE_KEY_KEEP: ${{ runner.os }}-openwrt-ccache-${{ hashFiles('openwrt/feeds.conf.default') }}
         run: |
-          echo "🔍 性能狂魔巡检：对齐云端军火库，准备对残留的冗余同名缓存进行精准原子性爆破..."
+          echo "🔍 正在执行极简化缓存策略：抹除云端所有存在的 ccache 缓存，确保新版能100%成功覆盖写入..."
           
-          # 1. 爆破必定残留的 ccache 旧缓存
+          # 利用原生命令删除固定名称的最新缓存（不管有没有，闭眼轰炸一次出空位）
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-ccache-latest \
+            | jq -r '.actions_caches[].id' \
+            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
+            
+          # 以防万一，顺手剿灭以前残留的所有乱码旧版怪胎
           gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
-            | jq -r --arg keep "$CCACHE_KEY_KEEP" '.actions_caches[] | select(.key | startswith("Linux-openwrt-ccache-")) | select(.key != $keep) | .id' \
-            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || echo "✨ 历史 ccache 残留已全数定点肃清！"
-          
-          echo "🎉 战场打扫完毕！残留旧包已被特种部队彻底剥离，下一秒系统自带的主力 cache 模块将只会向洁净如纸的云端写入本次生成的最高级缓存巅峰！"
+            | jq -r '.actions_caches[] | select(.key | startswith("${{ runner.os }}-openwrt-ccache-")) | .id' \
+            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
+            
+          echo "🎉 旧王座已被彻底清空！云端现在洁净如纸！"
+
+      - name: Save Updated Ccache # 💾 保存并升级金库！
+        # 无论前面是读了旧缓存后更新的，还是全新生成的，我们最后都统一把它当做 latest 供奉到云端！
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: openwrt/.ccache
+          # 👑 赐名 latest，独霸云端，天下仅此一份！
+          key: ${{ runner.os }}-openwrt-ccache-latest
 
       - name: Delete workflow runs # 清洁大妈1：清理那些没用的“流水线运行记录”
         # ✨ 性能狂魔绝杀招：剔除沉重的第三方包，使用原生 GitHub CLI 进行瞬间秒杀
