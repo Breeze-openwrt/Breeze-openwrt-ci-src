@@ -103,7 +103,7 @@ jobs:
           # 🛡️ 终极屏蔽：强制切断所有 --no-install-recommends (不下载配套教程和无用推流模块，只装干货核心)，再减几分钟体积！
           sudo -E apt-get -qq update
           sudo -E apt-get -qq install -y --no-install-recommends \
-            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            eatmydata ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
             bzip2 cargo ccache cdrkit-doc clang cmake cpio curl dejagnu device-tree-compiler \
             dos2unix ecj expect fastjar flex g++ g++-multilib gawk gcc gcc-multilib gettext \
             ghc git golang gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 \
@@ -213,9 +213,11 @@ jobs:
           echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           make defconfig
-          make download -j8
+          # 🖧 极速网卡榨取：将下载单通道猛增至 16 并发，彻底塞满 GitHub Action 的超级内网大宽带！
+          make download -j16
+          # ✨ 文件 I/O 底层斩杀：抛弃低效的 -exec 循环发包（区区几百个空文件会瞬间卡出系统几百次 fork 分岔），直接用底层内置的 -delete 瞬间归零！
           find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
+          find dl -size -1024c -delete
           
       - name: Prepare & Download (Taiyi) # 🛒 检测：如果是选了 Taiyi，我们把特需它的零件给去下载回来！
         id: package_taiyi
@@ -228,9 +230,11 @@ jobs:
           echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           make defconfig
-          make download -j8
+          # 🖧 极速网卡榨取：将下载单通道猛增至 16 并发，彻底塞满 GitHub Action 的超级内网大宽带！
+          make download -j16
+          # ✨ 文件 I/O 底层斩杀：抛弃低效的 -exec 循环发包（区区几百个空文件会瞬间卡出系统几百次 fork 分岔），直接用底层内置的 -delete 瞬间归零！
           find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
+          find dl -size -1024c -delete
 
       # ================== 👇 核心火力烹饪环节 ==================
       - name: Compile the Yashe firmware # 🍳 Yashe 开煮！
@@ -246,7 +250,9 @@ jobs:
           echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程以榨干 CPU 物理算力全力铸造 Yashe 固件..."
           # ✨ 性能狂魔极致榨干：由于 I/O 存在空窗期，$(nproc) + 1 能够让双核 CPU 永远处于满载不歇车状态。
           # 🛡️ 引入断崖 Debug 机制：一旦因为代码报错，立刻切换单核带 V=s 详细日志跑一次就停，拒绝原来那种浪费几十倍时间的 6 连无脑重复试错！
-          make -j$(($(nproc) + 1)) || make -j1 V=s
+          # ☢️ 终极核弹级黑魔法【eatmydata 拦截注入】：暴力接管系统底层 libc，把所有拖慢编译的 fsync() 安全落盘指令全拦截为 no-op 空气假动作。
+          # 你的磁盘从此将处于“物理裸奔”级别的仅内存异步无等待写入状态（在必定会一轮终结的 CI 镜像中压根不用考虑断电保护落盘），让编译器 iowait 并发卡顿立刻物理清零，形成降维打击！
+          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Compile the Taiyi firmware # 🍳 Taiyi 开煮！如果我们上面全勾选，这波因为蹭了饭（环境共用），它将光速完工！
@@ -262,7 +268,9 @@ jobs:
           echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程以榨干 CPU 物理算力全力铸造 Taiyi 固件..."
           # ✨ 性能狂魔极致榨干：由于 I/O 存在空窗期，$(nproc) + 1 能够让双核 CPU 永远处于满载不歇车状态。
           # 🛡️ 引入断崖 Debug 机制：一旦因为代码报错，立刻切换单核带 V=s 详细日志跑一次就停，拒绝原来那种浪费几十倍时间的 6 连无脑重复试错！
-          make -j$(($(nproc) + 1)) || make -j1 V=s
+          # ☢️ 终极核弹级黑魔法【eatmydata 拦截注入】：暴力接管系统底层 libc，把所有拖慢编译的 fsync() 安全落盘指令全拦截为 no-op 空气假动作。
+          # 你的磁盘从此将处于“物理裸奔”级别的仅内存异步无等待写入状态（在必定会一轮终结的 CI 镜像中压根不用考虑断电保护落盘），让编译器 iowait 并发卡顿立刻物理清零，形成降维打击！
+          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
 
           # 【统一打时间戳标记】 因为这是有可能运行的最后一步编译
           echo "status=success" >> $GITHUB_OUTPUT
