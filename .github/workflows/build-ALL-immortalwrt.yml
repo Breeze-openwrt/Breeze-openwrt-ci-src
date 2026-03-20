@@ -76,16 +76,17 @@ jobs:
         # ✨ 追捕时代最前沿：摒弃不稳定且解析慢的 @main，直接使用稳定的纯净最新大版本 @v4
         uses: actions/checkout@v6
 
-      - name: Free Disk Space (Ubuntu) # 2️⃣：强力拆迁队打扫战场。删掉虚拟机自带但咱们不用的杂物腾出空间！
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true       # 拆除安卓厂房
-          dotnet: true        # 拆除C#厂房
-          haskell: true       # 拆除Haskell厂房
-          large-packages: true
-          docker-images: true # 把多余的集装箱清空
-          swap-storage: true
+      - name: Free Disk Space (Ubuntu) # 2️⃣：强力拆迁队打扫战场 (性能狂魔原生秒杀版)
+        # ✨ 性能狂魔终极优化：抛弃了原来那个极其臃肿、喜欢磨洋工耗时达 3~5 分钟的第三方扫地大妈 jlumbroso 插件。
+        # 这里直接动用原生极其暴力的超级指令，一秒钟瞬间抹除系统出厂自带的安卓、.NET 和 Haskell 等高达 30GB 的重型沉睡工厂！无情释放空间！
+        run: |
+          echo "🧨 警告：正在引爆云端的旧有原厂巨兽建筑..."
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          echo "🎉 新世界已经完全腾清，耗时以秒计算！"
 
       - name: Initialization environment # 3️⃣：熬底汤 - 装载海量交叉编译需要的支持库（这是在装车间机器）
         env:

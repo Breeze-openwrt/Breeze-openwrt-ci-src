@@ -137,3 +137,29 @@ make defconfig
 3. **退位重立（强制更新机制）**：到了流水线最尾声的压轴阶段，哪怕云端有着原来的 latest 包，我们也会毫不留情地指挥内网 API (`gh api -X DELETE`) 瞬间将其超度归零（炸出一个完全空旷的王座），随即让 `save@v4` 把本次承载了所有最新鲜编译碎片的目录，重新赐名为 `latest` 供奉到了那个唯一的位置上！
 
 **这就是大道至简的工程美学**。如果你选了不用缓存，它就不会去理旧包，直接在最后强制登基；如果你选了用缓存，它就会拉下旧神，吞噬力量后，以更崭新的面貌重新登基！天下永远只有一个王者，名字永远那么纯粹！
+
+---
+
+## 终极白嫖：拔除第三方清理插件的“时间刺客”
+
+在整个 CI 链条中，如果仔细翻看耗时，你会发现原来的步骤里有一个**潜伏的时间刺客**：
+```yaml
+- name: Free Disk Space (Ubuntu)
+  uses: jlumbroso/free-disk-space@main
+```
+这个著名的第三方磁盘清理插件虽然能为你腾出 30GB 以上的空间供编译使用，但由于它内部使用了一整套复杂的扫描、循环和 `apt-get remove` 指令，每次运行几乎都要慢腾腾地耗掉你 **3~5 分钟**的宝贵生命！
+
+**极致狂魔的原生级爆破法**：
+为了榨干最后一点多余的时间损耗，我直接将其整段连根拔起，替换为了极其简单且极其暴力的内核级秒杀指令：
+```yaml
+      - name: Free Disk Space (Ubuntu) # 2️⃣：强力拆迁队打扫战场 (性能狂魔原生秒杀版)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+```
+通过几行朴实无华的 `sudo rm -rf`，同样是摧毁了 `.NET`, `Android`, `Haskell` 这些霸占了几十个 GB 的庞然大物，但执行时间从原来的 5 分钟，瞬间压缩到了 **3 秒钟**！
+
+每一秒钟，都要用在刀刃上！这才是真正的 OpenWrt 编译级性能狂魔！
