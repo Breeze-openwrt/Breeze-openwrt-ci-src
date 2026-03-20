@@ -40,12 +40,12 @@ on:
         type: boolean
         default: true
       use_dlcache:
-        description: "🧲 开不开原始代码池(dl/)缓存？(true开/false关)"
+        description: "🧲 读取并复用 dl/ 旧包？(选 false = 强制丢弃旧包并保存新包)"
         required: false
         type: boolean
         default: true
       use_ccache:
-        description: "🧲 开不开编译器碎片(ccache)缓存？(true开/false关)"
+        description: "🧲 读取并复用 ccache 碎片？(选 false = 强制砸碎重配新缓存)"
         required: false
         type: boolean
         default: true
@@ -163,7 +163,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
       - name: Cache dl directory # 🧲 高级护城河：架设 GitHub Cache 拦截网！
-        if: ${{ github.event.inputs.use_dlcache == 'true' || github.event.inputs.use_dlcache == '' }}
         # 听从召唤，进化至当前最高并发最纯净版的 @v4 (或你看到的 v5)！更强压缩速度，彻底断绝 Node20！
         uses: actions/cache@v5
         with:
@@ -171,18 +170,18 @@ jobs:
           path: |
             openwrt/dl
             !openwrt/dl/go-mod-cache
-          key: ${{ runner.os }}-openwrt-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
+          # 🔥 暴力洗炉机制：如果不读缓存 (false)，就把钥匙换成每次编译都唯独一份的 run_id，强行建立全新军火库！
+          key: ${{ runner.os }}-openwrt-dl-${{ (github.event.inputs.use_dlcache == 'true' || github.event.inputs.use_dlcache == '') && hashFiles('openwrt/feeds.conf.default') || github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-openwrt-dl-
+            ${{ (github.event.inputs.use_dlcache == 'true' || github.event.inputs.use_dlcache == '') && format('{0}-openwrt-dl-', runner.os) || 'DO_NOT_RESTORE_FORCE_UPDATE' }}
 
       - name: Cache Ccache directory # 🧲 C++ 编译碎片金库：极端白嫖秒杀方案！
-        if: ${{ github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == '' }}
         uses: actions/cache@v5
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-openwrt-ccache-${{ hashFiles('openwrt/feeds.conf.default') }}
+          key: ${{ runner.os }}-openwrt-ccache-${{ (github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == '') && hashFiles('openwrt/feeds.conf.default') || github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-openwrt-ccache-
+            ${{ (github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == '') && format('{0}-openwrt-ccache-', runner.os) || 'DO_NOT_RESTORE_FORCE_UPDATE' }}
 
       # ================== 👇 核心高能区域：买菜洗菜环节 ==================
       - name: Prepare & Download (Yashe) # 🛒 检测：如果是点单选了 Yashe，那就按照它的菜单出击采购！
@@ -191,8 +190,8 @@ jobs:
         run: |
           cd openwrt
           cp $GITHUB_WORKSPACE/.configyashe .config
-          # 🎛️ 性能狂魔开关拦截器：通过强行写入 `.config`，从编译器底层唤醒 Ccache
-          if [ "${{ github.event.inputs.use_ccache }}" == "true" ] || [ -z "${{ github.event.inputs.use_ccache }}" ]; then echo "CONFIG_CCACHE=y" >> .config; fi
+          # 🎛️ 性能狂魔洗炉机制：无论前端是否选择读取旧缓存，一旦开喷底层必须强制开启 Ccache 引擎收集新鲜碎片！
+          echo "CONFIG_CCACHE=y" >> .config
           make defconfig
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
@@ -204,8 +203,8 @@ jobs:
         run: |
           cd openwrt
           cp $GITHUB_WORKSPACE/.configtaiyi .config
-          # 🎛️ 性能狂魔开关拦截器：通过强行写入 `.config`，从编译器底层唤醒 Ccache
-          if [ "${{ github.event.inputs.use_ccache }}" == "true" ] || [ -z "${{ github.event.inputs.use_ccache }}" ]; then echo "CONFIG_CCACHE=y" >> .config; fi
+          # 🎛️ 性能狂魔洗炉机制：无论前端是否选择读取旧缓存，一旦开喷底层必须强制开启 Ccache 引擎收集新鲜碎片！
+          echo "CONFIG_CCACHE=y" >> .config
           make defconfig
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
