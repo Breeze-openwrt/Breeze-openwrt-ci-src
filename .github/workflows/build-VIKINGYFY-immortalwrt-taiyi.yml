@@ -246,8 +246,8 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload firmware to release # 🚀 成果挂榜
-        # 升级至 @v2 稳定版，完美适配 Node 24 引擎
-        uses: softprops/action-gh-release@v2
+        # 显式升级至最新开源版 v2.6.1，实现与 Node 24 完美对接
+        uses: softprops/action-gh-release@v2.6.1
         if: steps.tag.outputs.status == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -257,18 +257,24 @@ jobs:
           files: ${{ env.FIRMWARE }}/*
 
       - name: Delete workflow runs # 自动化记录扫除
-        # 使用最新的 main 分支，确保在 Node 24 下依然健壮
-        uses: GitRML/delete-workflow-runs@main
-        with:
-          retain_days: 5
-          keep_minimum_runs: 25
-
-      - name: Remove old Releases # 定期大扫除
-        # 锁定 v0.3.4，配合 Node 24 环境变量，实现“老树发新芽”，继续稳定清扫旧 release
-        uses: dev-drprasad/delete-older-releases@v0.3.4
-        if: env.UPLOAD_RELEASE == 'true'
-        with:
-          keep_latest: 10 # 🍱 保留 10 个最近的精品版本
-          delete_tags: true
+        # ✨ 原生强力清理：放弃旧 Node 插件，调用 GitHub 官方 CLI 执行精准消除
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 获取运行记录（排除最近 25 个），然后批量抹杀！无需 Node 环境加载，快如闪电
+          gh run list --limit 100 --json databaseId -q '.[].databaseId' | tail -n +26 | xargs -I {} gh run delete "{}" || true
+
+      - name: Remove old Releases # 定期大扫除
+        # ✨ 原生清道夫：利用高效 Shell 脚本直接清理，永远不会报环境弃用警告
+        if: env.UPLOAD_RELEASE == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 提取倒序排列的 release tag，放过最新的 10 个精品，对其余的执行降维打击
+          tags=$(gh release list -L 100 | awk -F '\t' '{print $1}' | tail -n +11)
+          if [ -n "$tags" ]; then
+            for tag in $tags; do
+              echo "🗑️ 正在清剿陈旧版本: $tag"
+              gh release delete "$tag" --cleanup-tag -y || true
+            done
+          fi

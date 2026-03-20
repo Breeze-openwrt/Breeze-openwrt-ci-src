@@ -53,7 +53,9 @@ jobs:
         event-type: Source Code Update
 
     - name: Delete workflow runs
-      uses: GitRML/delete-workflow-runs@main
-      with:
-        retain_days: 1
-        keep_minimum_runs: 1
+      # ✨ 高性能原生方案：抛弃 Node 20 老古董，用原生命令秒杀
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # 只为探底最新记录，保留 1 条足矣，免去环境依赖烦恼
+        gh run list --limit 100 --json databaseId -q '.[].databaseId' | tail -n +2 | xargs -r -I {} gh run delete "{}" || true

@@ -303,7 +303,8 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload firmware to release # 🚀 光年发射
-        uses: softprops/action-gh-release@v2
+        # 直接指定最新的社区版本 v2.6.1，实现 Node 24 上的狂飙
+        uses: softprops/action-gh-release@v2.6.1
         if: steps.tag.outputs.status == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -313,19 +314,24 @@ jobs:
           files: ${{ env.FIRMWARE }}/*
 
       - name: Delete workflow runs # 清洁大妈1：清理那些没用的“流水线运行记录”
-        # 这个脚本是专门用来打扫战场的。
-        # 它使用 @main 分支，意味着始终保持最先进的清理逻辑。
-        # 配合我们上面开启的 Node 24 指令，它能在最新云端环境下跑得飞快且不报警。
-        uses: GitRML/delete-workflow-runs@main
-        with:
-          retain_days: 15 # 📅 时间胶囊：保留过去 15 天的运行记录，更老的就扫进垃圾堆
-          keep_minimum_runs: 35 # 🍱 最低低保：不管过了多久，最少得留着 35 次记录备查
-
-      - name: Remove old Releases # 定时清理旧发布
-        uses: dev-drprasad/delete-older-releases@v0.3.4
-        if: env.UPLOAD_RELEASE == 'true'
-        with:
-          keep_latest: 20 # 🍱 存盘位设置：保留最近 20 个成功的固件包
-          delete_tags: true # 🏷️ 彻底清除：连同这些旧版本绑定的“时间戳标签”也一起撕掉，不占地儿
+        # ✨ 性能狂魔绝杀招：剔除沉重的第三方包，使用原生 GitHub CLI 进行瞬间秒杀
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 提取当前所有运行日志，保留最新的 35 条底线记录，剩下的全部喂给垃圾清理指令，飞速且没有环境告警！
+          gh run list --limit 1000 --json databaseId -q '.[].databaseId' | tail -n +36 | xargs -r -I {} gh run delete "{}" || true
+
+      - name: Remove old Releases # 定时清理旧发布
+        # ✨ 性能狂魔绝杀之二：用 shell 截取直接代替臃肿的开源插件
+        if: env.UPLOAD_RELEASE == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 列出发布时间线，保护最新的 20 个“精品固件包档案”，对其余的老古董实行无情抹除！连同对应标签一起拔除。
+          tags=$(gh release list -L 100 | awk -F '\t' '{print $1}' | tail -n +21)
+          if [ -n "$tags" ]; then
+            for tag in $tags; do
+              echo "🗑️ 正在清除史前发版: $tag"
+              gh release delete "$tag" --cleanup-tag -y || true
+            done
+          fi

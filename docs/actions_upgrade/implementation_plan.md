@@ -25,11 +25,13 @@
    在每个工作的 `jobs.<job_id>.env:` 区块中添加 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`。
    > [!NOTE]
    > 某些 Actions 运行器对 Job 内部的变量感应更灵敏，这能确保每个任务步骤都强制使用 Node 24 引擎。
-2. **Action 版本更新**：
-   - 将 `softprops/action-gh-release@v1` 或 `@v2.3.2` 统一修改为 `softprops/action-gh-release@v2`。
-   - 将 `dev-drprasad/delete-older-releases@v0.2.0` 统一修改为 `dev-drprasad/delete-older-releases@v0.3.4`。
-3. **极致中文注释**：
-   为这些改动添加针对“初二编程小白”的保姆级中文注释，解释每一行代码背后的“防坑逻辑”和“编程思想”。
+2. **🚀 去 Node 化：使用 GitHub 官方原生 CLI (终极方案)**：
+   - 原先的 `dev-drprasad` 和 `GitRML` 这两个清理小号 Action 的作者已经停止了对最新版本（Node.js 24）的支持，无论我们加什么参数都会继续报错。
+   - 这对于“性能狂魔”是无法容忍的冗余。我们将彻底抛弃这些第三方依赖，直接编写 10 行以内的极简 Bash 原生脚本，利用 GitHub Runners 自带并经过高度优化的 `gh` CLI，瞬间完成“清理过期固件”和“清除旧工作流”任务，一劳永逸解除隐患！
+3. **softprops/action-gh-release 极速拉取最新版**：
+   - 它是开源核心组件。我们把它显式升级到最新可用的大版本（如 `>=v2.2.1`）来消灭它的遗留报错。
+4. **极致中文源码级注释**：
+   - 添加为小白精心准备的中文注释，详细解释 Bash 脚本中的“数组按时间倒序截断并过滤循环清理”的架构思想。
 
 ## 验证计划
 
@@ -42,3 +44,16 @@
 - 请用户将代码推送至 GitHub 后，手动运行一次 `build-ALL-immortalwrt.yml` 工作流。
 - 观察 Actions 运行日志中是否还存在关于 Node.js 20 弃用的 **黄条警告**。
 - 确认 Release 能够正常生成且旧的 Release 能够按预期被清理。
+## ⚡ 编译报错紧急修复 (2026-03-20 补丁)
+
+### 问题描述
+用户反馈编译过程中出现 `ath11k-firmware-ipq6018` 与其 `ddwrt` 版本冲突，导致 OPKG 无法覆盖安装，编译中断。
+
+### 修复方案
+- **目标文件**：[.configyashe](file:///d:/prj/mihhawork/Breeze-openwrt-ci-src/.configyashe)
+- **具体操作**：
+  - 定位到第 2122 行：`CONFIG_PACKAGE_ath11k-firmware-ipq6018=y`
+  - 修改为：`# CONFIG_PACKAGE_ath11k-firmware-ipq6018 is not set`
+- **预期结果**：
+  - 编译系统将只安装一套固件，冲突消除。
+  - 配合已实施的“熔断机制”，下一次推送若成功则会自动发布，若失败则会安全停止。
