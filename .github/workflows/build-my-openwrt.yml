@@ -160,8 +160,7 @@ jobs:
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-      - name: Check space usage
-        if: (!cancelled())
+      - name: Check space usage # 🔍 硬盘空间检查
         run: df -hT
 
       - name: Upload bin directory
@@ -171,25 +170,26 @@ jobs:
           name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: openwrt/bin
 
-      - name: Organize files
+      - name: Organize files # 📂 整理编译出的宝贝
         id: organize
-        if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+        # 🛡️ 【熔断】：编译必须成功且开启上传才整理
+        if: steps.compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
         run: |
           cd openwrt/bin/targets/*/*
           rm -rf packages
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware directory
+      - name: Upload firmware directory # 📦 发货归档
         uses: actions/upload-artifact@main
-        if: steps.organize.outputs.status == 'success' && !cancelled()
+        if: steps.organize.outputs.status == 'success'
         with:
           name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
       - name: Upload firmware to cowtransfer
         id: cowtransfer
-        if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
+        if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true'
         run: |
           curl -fsSL git.io/file-transfer | sh
           ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
@@ -198,7 +198,7 @@ jobs:
 
       - name: Upload firmware to WeTransfer
         id: wetransfer
-        if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true' && !cancelled()
+        if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true'
         run: |
           curl -fsSL git.io/file-transfer | sh
           ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
@@ -207,7 +207,7 @@ jobs:
 
       - name: Generate release tag
         id: tag
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        if: env.UPLOAD_RELEASE == 'true'
         run: |
           echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
@@ -218,7 +218,7 @@ jobs:
       - name: Upload firmware to release # 🚀 成果挂榜
         # 升级至 @v2，支持云端最新 Node.js 24 引擎
         uses: softprops/action-gh-release@v2
-        if: steps.tag.outputs.status == 'success' && !cancelled()
+        if: steps.tag.outputs.status == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -236,7 +236,7 @@ jobs:
       - name: Remove old Releases # 定时大扫除
         # 统一提升至 v0.3.4 保持最大兼容性
         uses: dev-drprasad/delete-older-releases@v0.3.4
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        if: env.UPLOAD_RELEASE == 'true'
         with:
           keep_latest: 40 # 🍱 仅保留 40 个版本，预防仓库爆满
           delete_tags: true

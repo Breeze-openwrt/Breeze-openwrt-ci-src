@@ -237,14 +237,12 @@ jobs:
           # 【统一打时间戳标记】 因为这是有可能运行的最后一步编译
           echo "status=success" >> $GITHUB_OUTPUT
       
-      - name: Generate timestamp
-        # 不属于单一固件，不管你怎么点单，都得标记个出生证时间
-        if: (!cancelled())
+      - name: Generate timestamp # 🏷️ 制作出生证明：记录这一刻的时间戳
+        # 移除 !cancelled() 条件，确保只在编译成功后才打日期标
         run: |
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-      - name: Check space usage
-        if: (!cancelled())
+      - name: Check space usage # 🔍 硬盘体检
         run: df -hT
 
       - name: Upload bin directory # 📦 收废品（收集所有安装包）
@@ -255,9 +253,10 @@ jobs:
           name: OpenWrt_bin${{ env.FILE_DATE }}
           path: openwrt/bin
 
-      - name: Organize ALL output files # 🧲 万磁王：全范围收割成品刷机包。哪怕只有一个，或者有两个，统统搬走。
+      - name: Organize ALL output files # 🧲 万磁王：全范围收割成品刷机包
         id: organize
-        if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+        # 🛡️ 【熔断机制】：只要 Yashe 或 Taiyi 任意一个编译成功，且你开启了上传，才继续
+        if: (steps.compile_yashe.outputs.status == 'success' || steps.compile_taiyi.outputs.status == 'success') && env.UPLOAD_FIRMWARE == 'true'
         run: |
           mkdir -p $GITHUB_WORKSPACE/firmware
           # 这里用通配符 `*` 可以把你之前成功编译的所有固件一锅端
@@ -266,9 +265,9 @@ jobs:
           echo "FIRMWARE=$GITHUB_WORKSPACE/firmware" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware directory # 📦 【内部发货】 发送到 GitHub 的后台缓存构件中心去
+      - name: Upload firmware directory # 📦 【内部发货】
         uses: actions/upload-artifact@main
-        if: steps.organize.outputs.status == 'success' && !cancelled()
+        if: steps.organize.outputs.status == 'success'
         with:
           name: OpenWrt_Custom_firmware_Package${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
@@ -276,7 +275,7 @@ jobs:
       # ==== 一堆网盘推送的小开关 （当前默认屏蔽，如果你不想白白耗费免费云电脑流量不用管）====
       - name: Upload firmware to cowtransfer
         id: cowtransfer
-        if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
+        if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true'
         run: |
           curl -fsSL git.io/file-transfer | sh
           ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
@@ -285,16 +284,16 @@ jobs:
 
       - name: Upload firmware to WeTransfer
         id: wetransfer
-        if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true' && !cancelled()
+        if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true'
         run: |
           curl -fsSL git.io/file-transfer | sh
           ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
           echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
           echo "url=$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
 
-      - name: Generate release tag # 🏷️ 制作闪亮的门面发布标签
+      - name: Generate release tag
         id: tag
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        if: env.UPLOAD_RELEASE == 'true'
         run: |
           echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
@@ -303,12 +302,9 @@ jobs:
           [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware to release # 🚀 光年发射：一揽子打成 zip 安装包推送到了明面上，让大家看到大成果！
-        # 【版本升级赏析】：我们将版本从 v2.3.2 升到了 @v2
-        # 在编程界，直接写 @v2 意味着“请给我 v2 系列里最新、补丁打得最全的那个版本”。
-        # 它可以完美支持我们上面开启的 Node.js 24 无感迁移技术。
+      - name: Upload firmware to release # 🚀 光年发射
         uses: softprops/action-gh-release@v2
-        if: steps.tag.outputs.status == 'success' && !cancelled()
+        if: steps.tag.outputs.status == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -325,14 +321,11 @@ jobs:
           retain_days: 15 # 📅 时间胶囊：保留过去 15 天的运行记录，更老的就扫进垃圾堆
           keep_minimum_runs: 35 # 🍱 最低低保：不管过了多久，最少得留着 35 次记录备查
 
-      - name: Remove old Releases # 清洁大妈2：自动清理过期的旧发布，保持你的仓库“清爽干净”
-        # 【版本锁定赏析】：虽然这个特定的 Action 已经停止维护，但 v0.3.4 是它最后的强力稳定版。
-        # 配合我们在文件顶部设置的 FORCE_JAVASCRIPT_ACTIONS_TO_NODE24，
-        # 它依然可以在最新的 Node.js 24 环境下愉快地继续完成“清扫任务”而不会消失或崩毁。
+      - name: Remove old Releases # 定时清理旧发布
         uses: dev-drprasad/delete-older-releases@v0.3.4
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        if: env.UPLOAD_RELEASE == 'true'
         with:
-          keep_latest: 20 # 🍱 存盘位设置：保留最近 20 个成功的固件包，其他的就拜拜咯
+          keep_latest: 20 # 🍱 存盘位设置：保留最近 20 个成功的固件包
           delete_tags: true # 🏷️ 彻底清除：连同这些旧版本绑定的“时间戳标签”也一起撕掉，不占地儿
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
