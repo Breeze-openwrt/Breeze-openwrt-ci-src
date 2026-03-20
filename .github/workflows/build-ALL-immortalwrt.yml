@@ -162,6 +162,25 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
+      - name: 🧹 Purge Old Caches # 🧹 智能“洗锅”特警：自动销毁历史冗余缓存块！
+        # 👑 破案：如果不想要旧缓存，系统本身是「只加不删」的！这会导致每次生成一个含乱码后缀的新缓存（两个异名缓存横空并存）。
+        # 🔥 现在如果你取消勾选缓存，下面这段黑魔法将调动 GitHub 原生 API，像激光制导轰炸一样精准摧毁那些长年堆积的对应老缓存，还你一个最清爽的空间，之后再无乱码后缀包产生！
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event.inputs.use_dlcache }}" == "false" ]; then
+            echo "🗑️ 司令部收到指令：废弃旧 dl 碎片。正在释放云端空袭精准销毁所有 dl 的历史遗留缓存..."
+            gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
+              | jq -r '.actions_caches[] | select(.key | contains("openwrt-dl")) | .id' \
+              | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || echo "✨ dl 缓存区清空完毕！"
+          fi
+          if [ "${{ github.event.inputs.use_ccache }}" == "false" ]; then
+            echo "🗑️ 司令部收到指令：废弃旧 ccache 碎片。正在释放云端空袭精准销毁所有 ccache 的历史遗留缓存..."
+            gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
+              | jq -r '.actions_caches[] | select(.key | contains("openwrt-ccache")) | .id' \
+              | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || echo "✨ ccache 缓存区清空完毕！"
+          fi
+
       - name: Cache dl directory # 🧲 高级护城河：架设 GitHub Cache 拦截网！
         # 听从召唤，进化至当前最高并发最纯净版的 @v4 (或你看到的 v5)！更强压缩速度，彻底断绝 Node20！
         uses: actions/cache@v5
@@ -170,18 +189,22 @@ jobs:
           path: |
             openwrt/dl
             !openwrt/dl/go-mod-cache
-          # 🔥 暴力洗炉机制：如果不读缓存 (false)，就把钥匙换成每次编译都唯独一份的 run_id，强行建立全新军火库！
-          key: ${{ runner.os }}-openwrt-dl-${{ (github.event.inputs.use_dlcache == 'true' || github.event.inputs.use_dlcache == '') && hashFiles('openwrt/feeds.conf.default') || github.run_id }}
+          # 🔥 既然我们上面的猎杀小队已经提前清空了不要的旧缓存，这里就不用搞花里胡哨且容易造出垃圾并存的 run_id 乱码名啦。
+          # 👑 以后不管读取与否，它只会干净利落地生成并覆盖为一个最正统的唯一标定缓存包！
+          key: ${{ runner.os }}-openwrt-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
           restore-keys: |
-            ${{ (github.event.inputs.use_dlcache == 'true' || github.event.inputs.use_dlcache == '') && format('{0}-openwrt-dl-', runner.os) || 'DO_NOT_RESTORE_FORCE_UPDATE' }}
+            ${{ runner.os }}-openwrt-dl-
 
       - name: Cache Ccache directory # 🧲 C++ 编译碎片金库：极端白嫖秒杀方案！
         uses: actions/cache@v5
         with:
-          path: ~/.ccache
-          key: ${{ runner.os }}-openwrt-ccache-${{ (github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == '') && hashFiles('openwrt/feeds.conf.default') || github.run_id }}
+          # 🐞 重大破案级修复：为什么之前 Ccache 始终只有下载缓存 dl 出去了，却死活没被打包储存？
+          #    原因：OpenWrt 原生并非把缓存存在电脑老家(~/)，而是保存在自己的肚子 `openwrt/.ccache` 目录里啦！
+          # 👉 所以之前找错了门，自然打包出来的就是空的。现在改对了路径，金库终于正式启动咯！
+          path: openwrt/.ccache
+          key: ${{ runner.os }}-openwrt-ccache-${{ hashFiles('openwrt/feeds.conf.default') }}
           restore-keys: |
-            ${{ (github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == '') && format('{0}-openwrt-ccache-', runner.os) || 'DO_NOT_RESTORE_FORCE_UPDATE' }}
+            ${{ runner.os }}-openwrt-ccache-
 
       # ================== 👇 核心高能区域：买菜洗菜环节 ==================
       - name: Prepare & Download (Yashe) # 🛒 检测：如果是点单选了 Yashe，那就按照它的菜单出击采购！
@@ -310,6 +333,28 @@ jobs:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           body_path: release.txt
           files: ${{ env.FIRMWARE }}/*
+
+      - name: 🧹 Atomically Purge Old Caches # 🧹 原子性销毁旧缓存残留 (性能狂魔终极杀招)
+        # 🛡️ 只有在所有编译和上传都完全成功，确定云端即将生成新缓存时，才去消灭历史残余，保证绝对原子性和安全性！
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DL_KEY_KEEP: ${{ runner.os }}-openwrt-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
+          CCACHE_KEY_KEEP: ${{ runner.os }}-openwrt-ccache-${{ hashFiles('openwrt/feeds.conf.default') }}
+        run: |
+          echo "🔍 性能狂魔巡检：对齐云端军火库，准备对残留的冗余同名缓存进行精准原子性爆破..."
+          
+          # 1. 爆破必定残留的 dl 旧缓存（通过 -r 参数和 jq 解析，仅针对具有此特定前缀的全部旧尸体进行定点打击，绝对绕过即将要保存的那份唯一血脉）
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
+            | jq -r --arg keep "$DL_KEY_KEEP" '.actions_caches[] | select(.key | startswith("Linux-openwrt-dl-")) | select(.key != $keep) | .id' \
+            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || echo "✨ 历史 dl 残留已全数定点肃清！"
+            
+          # 2. 爆破必定残留的 ccache 旧缓存
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
+            | jq -r --arg keep "$CCACHE_KEY_KEEP" '.actions_caches[] | select(.key | startswith("Linux-openwrt-ccache-")) | select(.key != $keep) | .id' \
+            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || echo "✨ 历史 ccache 残留已全数定点肃清！"
+          
+          echo "🎉 战场打扫完毕！残留旧包已被特种部队彻底剥离，下一秒系统自带的主力 cache 模块将只会向洁净如纸的云端写入本次生成的最高级缓存巅峰！"
 
       - name: Delete workflow runs # 清洁大妈1：清理那些没用的“流水线运行记录”
         # ✨ 性能狂魔绝杀招：剔除沉重的第三方包，使用原生 GitHub CLI 进行瞬间秒杀
