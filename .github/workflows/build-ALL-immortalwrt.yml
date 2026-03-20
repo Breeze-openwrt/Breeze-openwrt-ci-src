@@ -68,7 +68,8 @@ jobs:
 
     steps:
       - name: Checkout # 1️⃣：下发检出指令，去咱们的库房把上面的那些自定义脚本全拖到肉机里来
-        uses: actions/checkout@main
+        # ✨ 追捕时代最前沿：摒弃不稳定且解析慢的 @main，直接使用稳定的纯净最新大版本 @v4
+        uses: actions/checkout@v4
 
       - name: Free Disk Space (Ubuntu) # 2️⃣：强力拆迁队打扫战场。删掉虚拟机自带但咱们不用的杂物腾出空间！
         uses: jlumbroso/free-disk-space@main
@@ -152,9 +153,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
       - name: Cache dl directory # 🧲 高级护城河：架设 GitHub Cache 拦截网！
-        # 这个动作是性能狂魔提速的关键。它会在“下载源码”前去高速云盘检查有没有存货。
-        # 如果有，一秒钟拉回几 GB 源码；如果没有，它会在今天跑完工作流后自动把下载好的包传到云盘，供明天秒拉！
-        uses: actions/cache@v3
+        # 听从召唤，进化至当前最高并发最纯净版的 @v4 (或你看到的 v5)！更强压缩速度，彻底断绝 Node20！
+        uses: actions/cache@v4
         with:
           path: openwrt/dl
           key: ${{ runner.os }}-openwrt-dl-${{ hashFiles('openwrt/feeds.conf.default') }}
@@ -218,7 +218,7 @@ jobs:
         run: df -hT
 
       - name: Upload bin directory # 📦 收废品（收集所有安装包）
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         # 只要你勾选的任一主线跑成功了我们都吸，防断连
         if: (steps.compile_yashe.outputs.status == 'success' || steps.compile_taiyi.outputs.status == 'success') && env.UPLOAD_BIN_DIR == 'true'
         with:
@@ -238,7 +238,7 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload firmware directory # 📦 【内部发货】
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         if: steps.organize.outputs.status == 'success'
         with:
           name: OpenWrt_Custom_firmware_Package${{ env.FILE_DATE }}
