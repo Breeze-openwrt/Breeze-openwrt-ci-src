@@ -86,13 +86,13 @@ jobs:
           df -hT
           
           echo "🧨 警告：正在引爆云端的旧有原厂巨兽建筑..."
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          # 核心庞大出厂建筑包 (瞬间斩杀释放极限空间)
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          # 附加累赘工具包 (零秒并发切割)
+          sudo rm -rf /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/chromium
           sudo docker image prune --all --force
           
-          echo "🎉 新世界建筑清除完毕，耗时仅几秒！"
+          echo "🎉 新世界建筑彻底清除完毕，已达到物理理论上的清理极值！耗时仅几秒！"
           echo "📊 强力拆迁后系统总可用空间对比（见证白嫖的奇迹）："
           df -hT
 
