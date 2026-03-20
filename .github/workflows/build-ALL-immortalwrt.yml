@@ -179,19 +179,6 @@ jobs:
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
 
-      - name: 🧹 Purge Old Caches # 🧹 智能“洗锅”特警：自动销毁历史冗余缓存块！
-        # 👑 破案：如果不想要旧缓存，系统本身是「只加不删」的！这会导致每次生成一个含乱码后缀的新缓存（两个异名缓存横空并存）。
-        # 🔥 现在如果你取消勾选缓存，下面这段黑魔法将调动 GitHub 原生 API，像激光制导轰炸一样精准摧毁那些长年堆积的对应老缓存，还你一个最清爽的空间，之后再无乱码后缀包产生！
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ "${{ github.event.inputs.use_ccache }}" == "false" ]; then
-            echo "🗑️ 司令部收到指令：废弃旧 ccache 碎片。正在释放云端空袭精准销毁所有 ccache 的历史遗留缓存..."
-            gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
-              | jq -r '.actions_caches[] | select(.key | contains("openwrt-ccache")) | .id' \
-              | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || echo "✨ ccache 缓存区清空完毕！"
-          fi
-
       - name: Restore Ccache directory # 🧲 C++ 编译碎片金库：尝试拉取老本！
         # 🛡️ 只有当用户勾选了复用缓存时，我们才去云端尝试下载。否则直接全新开始！
         if: github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == ''
