@@ -214,6 +214,8 @@ jobs:
           cd openwrt
           cp $GITHUB_WORKSPACE/.configyashe .config
           # 🎛️ 性能狂魔洗炉机制：无论前端是否选择读取旧缓存，一旦开喷底层必须强制开启 Ccache 引擎收集新鲜碎片！
+          # 【史诗级大坑修复1】在 Openwrt 里开启 Ccache，它硬性依赖开发者选项，如果不加 CONFIG_DEVEL=y，在执行 make defconfig 时系统会自动判定依赖缺失，然后把你辛苦加上的 CONFIG_CCACHE 给静默删掉！
+          echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           make defconfig
           make download -j8
@@ -227,6 +229,8 @@ jobs:
           cd openwrt
           cp $GITHUB_WORKSPACE/.configtaiyi .config
           # 🎛️ 性能狂魔洗炉机制：无论前端是否选择读取旧缓存，一旦开喷底层必须强制开启 Ccache 引擎收集新鲜碎片！
+          # 【史诗级大坑修复1】在 Openwrt 里开启 Ccache，它硬性依赖开发者选项，如果不加 CONFIG_DEVEL=y，在执行 make defconfig 时系统会自动判定依赖缺失，然后把你辛苦加上的 CONFIG_CCACHE 给静默删掉！
+          echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           make defconfig
           make download -j8
@@ -240,6 +244,9 @@ jobs:
         run: |
           cd openwrt
           cp $GITHUB_WORKSPACE/.configyashe .config
+          # 【史诗级大坑修复2】在最终编译阶段，原工作流习惯性再次 cp 覆盖 .config，这会导致前面下载阶段开启的 ccache 设置被完全擦除！必须在此处重磅再次注入！
+          echo "CONFIG_DEVEL=y" >> .config
+          echo "CONFIG_CCACHE=y" >> .config
           make defconfig
           echo -e "全线满载！启动 $(nproc) 线程全力铸造 Yashe 固件..."
           make -j$(nproc) || make -j$(nproc) || make -j$(nproc) || make -j1 || make -j1 || make -j1 V=s
@@ -251,6 +258,9 @@ jobs:
         run: |
           cd openwrt
           cp $GITHUB_WORKSPACE/.configtaiyi .config
+          # 【史诗级大坑修复2】在最终编译阶段，原工作流习惯性再次 cp 覆盖 .config，这会导致前面下载阶段开启的 ccache 设置被完全擦除！必须在此处重磅再次注入！
+          echo "CONFIG_DEVEL=y" >> .config
+          echo "CONFIG_CCACHE=y" >> .config
           make defconfig
           echo -e "全线满载！启动 $(nproc) 线程全力铸造 Taiyi 固件..."
           make -j$(nproc) || make -j$(nproc) || make -j$(nproc) || make -j1 || make -j1 || make -j1 V=s

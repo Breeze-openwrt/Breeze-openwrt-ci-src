@@ -74,3 +74,35 @@ gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
 - **时间节点的完美契合**：此步骤位于所有正式步骤之尾。由于 `actions/cache` 插件的设计特性是“利用隐藏在步骤底层的 post-action 来进行最终上传”，所以我们在它即将上传的前一秒拔刀，清除掉天下所有阻碍。于是下一秒，云端仅会接受最纯净的这一份传承！
 
 再也不会有空间被撑爆，再也不会有各种怪咖版本的前缀垃圾堆积如山！你的 CI 流水线现在变得极其致命又极其优雅！
+
+---
+
+## 终局之战：为什么 Ccache “依然”没生成？（史诗级连环坑点）
+
+就在我们认为一切就绪时，发现 `ccache` 的包竟然还是没有出现！这次隐藏的坑点堪称“变态级”，我们深挖 OpenWrt 底层编译系统后，捕捉到了以下两个串联的致命元凶：
+
+### 隐蔽元凶一：OpenWrt `make defconfig` 的“自作主张”
+原先的代码中使用了这样的指令来强行开启缓存：
+```bash
+echo "CONFIG_CCACHE=y" >> .config
+make defconfig
+```
+**深度病理剖析**：
+在 OpenWrt 的 Kconfig 菜单逻辑里，`CCACHE` 选项被死死地绑定在一个名为 `Advanced configuration options (for developers)`（开发者选项）的大类目之下。而在代码库原有的默认配置里，开发者选项 (`CONFIG_DEVEL`) 是关闭的。
+当我们硬塞进去一行 `CONFIG_CCACHE=y` 并随后运行 `make defconfig` 时，OpenWrt 自带的校验机制像个死板的保安，立刻发现不对劲：**“喂！你没开父级门槛（DEVEL），怎么能直接用里面的子功能？不合规！”**。于是，它毫无提示地、**极其静默地**就把我们辛辛苦苦塞进去的那行配置给直接删掉了！
+**应对破解法**：我们在前后加上了极其关键的底座——开启 `CONFIG_DEVEL=y`。
+
+### 隐蔽元凶二：工作流中的“暴力覆盖”
+就算挺过了上面那关，在最后的编译阶段竟然还有个“内鬼”：
+```bash
+- name: Compile the Yashe firmware
+  run: |
+    cp $GITHUB_WORKSPACE/.configyashe .config
+    make defconfig
+```
+**深度病理剖析**：
+这简直是个惊天大坑。流水线前期在“Prepare & Download”步骤里，好不容易下载好了碎片并挂上了 Ccache 配置。到了真正的“纯编译阶段”，原作者出于习惯，竟然又重新复制了一遍最原始的、没有 Ccache 配置的 `.configyashe` 文件覆盖掉了 `.config`！导致真正干活儿编译时，配置又变成了最原始的裸奔状态，所有的 Ccache 拦截网由于配置丢失全部瘫痪报废，自然就又生成了一个空金库。
+
+**应对破解法**：必须实行“火力全覆盖”。不但在 Download 阶段注入双标记，更加在真正开火的编译阶段（`Compile Yashe` 和 `Compile Taiyi`）也同步注入了 `CONFIG_DEVEL=y` 和 `CONFIG_CCACHE=y` 双向加固，确保到最后一刻配置绝不掉线！
+
+**现在，Ccache 性能怪兽的枷锁已经被彻底击碎！**
