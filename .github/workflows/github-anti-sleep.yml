@@ -10,12 +10,15 @@ on:
 jobs:
   anti-sleep:
     runs-on: ubuntu-22.04
+    env:
+      # 🚀 【Node.js 24 引擎开关】：剿灭过时的 node 20 警告。
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     # 🛡️ 赋予机器人在当前仓库自由签名的权限
     permissions:
       contents: write
     steps:
       - name: 📥 拉取整个仓库代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: 🚀 幽灵签到：执行空提交破解僵尸判定
         run: |
