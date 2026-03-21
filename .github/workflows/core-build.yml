@@ -86,7 +86,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: openwrt/.ccache
-          key: ${{ runner.os }}-openwrt-ccache-shared-latest
+          key: ${{ runner.os }}-openwrt-ccache-latest
 
       # ================== 👇 串行第一棒：Taiyi 苦力打底 ==================
       - name: Build Taiyi First # 🍳 性能狂魔炼丹炉：打底硬造
@@ -171,7 +171,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: openwrt/.ccache
-          key: ${{ runner.os }}-openwrt-ccache-shared-latest
+          key: ${{ runner.os }}-openwrt-ccache-latest
 
       - name: Clean Workflow Runs & Releases # 🧹 调用外部清道夫打扫
         if: always()
