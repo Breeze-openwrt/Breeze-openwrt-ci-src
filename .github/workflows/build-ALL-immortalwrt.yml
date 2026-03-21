@@ -1,4 +1,4 @@
-name: ✨ Build ALL Optional (Yashe & Taiyi) 串行快线
+name: ✨ Build ALL Optional (Taiyi & Yashe) 串行快线
 
 on:
   repository_dispatch:
@@ -6,18 +6,18 @@ on:
     - cron: '0 18 2,16 * *'
   workflow_dispatch:
     inputs:
-      build_yashe:
-        description: "🔥 是否出锅 Yashe 机型固件？ (勾选表示 Yes)"
+      build_taiyi:
+        description: "🔥 是否出锅 Taiyi 机型固件？ (开路先锋：负责造底座) 🚀"
         required: true
         type: boolean
         default: true
-      build_taiyi:
-        description: "🔥 是否出锅 Taiyi 机型固件？ (勾选表示 Yes)"
+      build_yashe:
+        description: "🔥 是否出锅 Yashe 机型固件？ (光速出锅：白嫖完备底座) 🚀"
         required: true
         type: boolean
         default: true
       use_ccache:
-        description: "🧲 读取并共用 ccache 碎片？"
+        description: "🧲 读取并共用 ccache 金库大还丹？"
         required: false
         type: boolean
         default: true
@@ -25,9 +25,10 @@ on:
 jobs:
   dispatch_combo:
     # 只要勾选了其中任意一个，我们就启动同源架构联合列车
-    if: github.event.inputs.build_yashe == 'true' || github.event.inputs.build_taiyi == 'true' || github.event_name != 'workflow_dispatch'
+    if: github.event.inputs.build_taiyi == 'true' || github.event.inputs.build_yashe == 'true' || github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/core-build.yml
     with:
-      build_yashe: ${{ github.event.inputs.build_yashe == 'true' || github.event_name != 'workflow_dispatch' }}
+      # 我们同样在底层将 Taiyi 的传参排在了首位，贯彻您关于 Taiyi 优先的架构哲学！
       build_taiyi: ${{ github.event.inputs.build_taiyi == 'true' || github.event_name != 'workflow_dispatch' }}
+      build_yashe: ${{ github.event.inputs.build_yashe == 'true' || github.event_name != 'workflow_dispatch' }}
       use_ccache: ${{ github.event.inputs.use_ccache == 'true' || github.event_name != 'workflow_dispatch' }}
