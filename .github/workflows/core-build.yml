@@ -1,0 +1,190 @@
+# =========================================================================================
+# 🎓【初二小白课堂：源码阅读与赏析】 - core-build.yml (同源架构共享流水线)
+# 
+# 📘【剧本背景】：
+# 老大（用户您）发现了盲点！如果两个机器（Yashe 和 Taiyi）用的是同一个型号的 CPU，
+# 那么它们底层的“编译车床（工具链/C语言核心库）”是完全一样的。
+# 如果我们为了追求“并发”开两台机器，就等于雇了两个人，但这两个人都要花 2 个小时先去造一遍车床！
+# 这简直是暴殄天物！
+# 
+# 🕵️‍♂️【作者意图】：
+# 我们采用“单台云服务器串行”的模式，保留了绝佳的**脚本外包隔离**！
+# 流程变更（按照大老板最新要求，Yashe 率先登场）：
+# 1. 机器先吭哧吭哧花两个小时，把通用的底层环境和 Yashe 固件出锅。
+# 2. 紧接着，换上 Taiyi 的图纸。这时候 `make` 程序会惊呼：“哇，底层工具链刚才做 Yashe 时全造好了！”
+# 3. 于是，Taiyi 只需要花短短几分钟，补齐自己独有的小插件，光速出锅！
+# 这样，不仅 Ccache 是完全共通共用的，连底层编译环境（staging_dir）红利也被彻底榨干！
+# =========================================================================================
+
+name: WRT-CORE-SHARED
+
+on:
+  workflow_call:
+    inputs:
+      build_yashe:
+        required: true
+        type: boolean
+      build_taiyi:
+        required: true
+        type: boolean
+      use_ccache:
+        required: true
+        type: boolean
+
+env:
+  REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
+  REPO_BRANCH: main
+  FEEDS_CONF: feeds.conf.default
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
+
+jobs:
+  core:
+    name: 🏭 同源架构双子星顺序编译厂
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout # 1️⃣：去代码仓库提取所有的核心剧本（包括我们的 scripts 文件夹）
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space (Ubuntu) # 2️⃣：呼叫外包的强力大妈打扫厂房
+        run: bash $GITHUB_WORKSPACE/scripts/clean_ubuntu.sh
+
+      - name: Initialization environment # 3️⃣：装载各类工具及雷达扫描异星副盘
+        run: bash $GITHUB_WORKSPACE/scripts/init_env.sh
+
+      - name: Clone source code # 4️⃣：去把 OpenWrt 的源代码大库房拉过来
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+          git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+          ln -sf ${{ env.WORK_DIR }}/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Load custom feeds # 5️⃣：导入个人定制的商店源连接
+        run: |
+          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+          chmod +x $DIY_P1_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P1_SH
+
+      - name: Update and Install feeds # 6️⃣：让库房向外网商店下达目录更新请求并落户
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Load custom configuration # 7️⃣：给源码上微调小特权（打补丁）
+        run: |
+          [ -e files ] && mv files openwrt/files
+          chmod +x $DIY_P2_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P2_SH
+
+      - name: Restore Ccache & Toolchain # 🧲 共用金库：不但召回源文件，直接把整条生产流水线车床都搬回来！
+        if: inputs.use_ccache == true
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            openwrt/.ccache
+            openwrt/staging_dir/host*
+            openwrt/staging_dir/tool*
+          key: ${{ runner.os }}-openwrt-ccache-latest
+
+      - name: Fix Caches Timestamps # 🪄 神级黑魔法：消除 Github Actions 打包的时间差，欺骗系统强制生效工具链
+        if: inputs.use_ccache == true
+        run: bash $GITHUB_WORKSPACE/scripts/fix_cache_timestamps.sh
+
+      # ================== 👇 串行第一棒：Yashe 苦力打底 ==================
+      - name: Build Yashe First # 🍳 性能狂魔炼丹炉：打底硬造
+        if: inputs.build_yashe == true
+        run: |
+          cd openwrt
+          echo "🛒 开始组装 Yashe..."
+          cp $GITHUB_WORKSPACE/.configyashe .config
+          cat $GITHUB_WORKSPACE/Config/common.txt >> .config
+          
+          make defconfig
+          make download -j16
+          find dl -size -1024c -delete
+          
+          echo "🔥 Yashe 开始全线程开火炼底丹..."
+          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
+          
+          # 【隔离产物】：做好了先收到专属柜子里，防止被后面的覆盖
+          mkdir -p $GITHUB_WORKSPACE/firmware/Yashe
+          cp -r bin/targets/*/*/*.* $GITHUB_WORKSPACE/firmware/Yashe/ 2>/dev/null || true
+
+      # ================== 👇 串行第二棒：Taiyi 极速白嫖 ==================
+      - name: Build Taiyi (享受工具链免编译红利) # 🍳 性能狂魔炼丹炉：蹭前面的热锅！
+        if: inputs.build_taiyi == true
+        run: |
+          cd openwrt
+          echo "🛒 开始组装 Taiyi..."
+          cp $GITHUB_WORKSPACE/.configtaiyi .config
+          cat $GITHUB_WORKSPACE/Config/common.txt >> .config
+          
+          make defconfig
+          make download -j16
+          find dl -size -1024c -delete
+          
+          echo "🔥 Taiyi 开始坐享其成，只编译差异化插件..."
+          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
+          
+          mkdir -p $GITHUB_WORKSPACE/firmware/Taiyi
+          cp -r bin/targets/*/*/*.* $GITHUB_WORKSPACE/firmware/Taiyi/ 2>/dev/null || true
+
+      - name: Global Variables Registry # 🏷️ 集中注册时间标签
+        id: vars
+        run: |
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware directory # 📦 【内部发货】向前端页面推送盒子 
+        uses: actions/upload-artifact@v4
+        if: steps.vars.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
+        with:
+          name: OpenWrt_Firmware_SharedCombo_${{ env.FILE_DATE }}
+          path: $GITHUB_WORKSPACE/firmware
+
+      - name: Generate release tag
+        id: tag
+        if: env.UPLOAD_RELEASE == 'true'
+        run: |
+          echo "release_tag=$(date +"%Y.%m.%d-%H%M")-Combo" >> $GITHUB_OUTPUT
+          touch release.txt
+          echo "🎉 新鲜出炉的同源巨作合集！包含您本次勾选的机型最新版固件。" >> release.txt
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Deploy Release # 🚀 极速光年发射，正式向世界宣告发版！
+        if: steps.tag.outputs.status == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 这一次发版，由于我们按文件夹整理了产物，这行指令会把 Yashe 和 Taiyi 共同挂在一个 Release 页面下供人点击下载！一站式提货！
+          gh release create "${{ steps.tag.outputs.release_tag }}" \
+            --title "OpenWrt 纯净同源发行版" \
+            --notes-file release.txt \
+            $GITHUB_WORKSPACE/firmware/*/*.* || true
+
+      - name: Rebuild Ccache Throne # 🧹 请求外挂清理脚本打扫【共用金库王座】
+        if: success() && inputs.use_ccache == true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash $GITHUB_WORKSPACE/scripts/ccache_manager.sh
+
+      - name: Save Updated Ccache & Toolchain # 💾 保存【融合了双子星一切结晶的完美金丹及专属车床】
+        if: success() && inputs.use_ccache == true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            openwrt/.ccache
+            openwrt/staging_dir/host*
+            openwrt/staging_dir/tool*
+          key: ${{ runner.os }}-openwrt-ccache-latest
+
+      - name: Clean Workflow Runs & Releases # 🧹 调用外部清道夫打扫
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash $GITHUB_WORKSPACE/scripts/clean_releases.sh
