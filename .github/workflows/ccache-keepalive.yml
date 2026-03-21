@@ -1,0 +1,28 @@
+name: 💓 Ccache Immortality Heartbeat
+
+on:
+  schedule:
+    # 早上 5 点 (北京时间) = 前一天晚上 21:00 (UTC 时间)。
+    # */5 表示每隔 5 天执行一次（完美卡在 GitHub 7天死线到来之前续命）
+    - cron: '0 21 */5 * *'
+  workflow_dispatch: # 留一个手动开关，也可以随时点击运行去续命
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-22.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: 🧲 Touch & Renew Ccache Lifespan (调用金库，触发底层续命计时)
+        # 只要执行了一次 API 级的 Restore 下载动作，GitHub 服务器就会把这个大文件的“最后活跃时间 (Last Accessed)”刷成“此刻”，倒计时重新回到第 0 天。
+        uses: actions/cache/restore@v5
+        with:
+          path: openwrt/.ccache
+          key: ${{ runner.os }}-openwrt-ccache-latest
+          
+      - name: 🎉 Success Verification
+        run: |
+          echo "🎉 终极极客续命法术释放成功！"
+          echo "GitHub 服务器刚刚被这台幽灵机器光速访问了一次金库！"
+          echo "系统底层已经将你那几 GB 大小的 Ccache 的『最后存活生命线』强制重置为了：从此刻起往后再加 7 天！"
+          echo "真正的永生不死已达成！"

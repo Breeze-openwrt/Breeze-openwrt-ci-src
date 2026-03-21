@@ -1,0 +1,37 @@
+name: 🛡️ GitHub Anti-Sleep (防沉迷破解)
+
+on:
+  schedule:
+    # 🕒 定时触发：每个月的 1 号凌晨 0 点 (UTC 时间) 自动运行一次。
+    # 完美卡在 60 天休眠大限之前，每月强行向 GitHub 证明本仓库“我还活着”。
+    - cron: '0 0 1 * *'
+  workflow_dispatch: # 留一个手动开关，也可以随时点击运行去打卡
+
+jobs:
+  anti-sleep:
+    runs-on: ubuntu-22.04
+    # 🛡️ 赋予机器人在当前仓库自由签名的权限
+    permissions:
+      contents: write
+    steps:
+      - name: 📥 拉取整个仓库代码
+        uses: actions/checkout@v4
+
+      - name: 🚀 幽灵签到：执行空提交破解僵尸判定
+        run: |
+          echo "🛡️ 开始执行物理防沉迷破解规避..."
+          
+          # 1. 伪装成官方机器人身份，避免污染你个人的提交记录
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # 2. 核心黑魔法：物理刻写与存证
+          # 生成一个包含打卡准确时间戳的轻量实体文件，让 GitHub 切实捕捉到整个仓库发生过的物理变化
+          echo "💖 **最后一次系统防沉迷心脏起搏打卡时间**: $(date +"%Y-%m-%d %H:%M:%S UTC")" > KeepaliveStatus.md
+          
+          # 3. 将它推送并烙印进你的主仓库时间线
+          git add KeepaliveStatus.md
+          git commit -m "🛡️ Auto Anti-Sleep: 更新 KeepaliveStatus.md 签到心电图，强行撕裂 60天物理休眠墙！"
+          git push
+          
+          echo "🎉 虚空打卡成功！你的 GitHub Action 定时任务又赢得了续命 60 天的免死金牌！全仓库进入永生模式！"
