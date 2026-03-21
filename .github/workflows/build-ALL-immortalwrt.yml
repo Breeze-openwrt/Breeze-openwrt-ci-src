@@ -1,73 +1,33 @@
-# =========================================================================================
-# 🎓【初二小白课堂：源码阅读与赏析】 - build-ALL-immortalwrt.yml (前台经理)
-# 
-# 📘【剧本背景】：
-# 这曾经是一本长达 400 行、包含了杀猪洗菜生火全套流程的极其臃肿的“清明上河图”。
-# 哪怕你只是想改一下时区，在密密麻麻的乱码丛林里都难以下手。
-# 现在，它升职成了纯高管级别的“前台点单大堂经理”！
-#
-# 🕵️‍♂️【作者意图】：
-# 它的作用变得极其纯粹且傲慢：
-# 1. 在网页上为你画出打钩的问卷（你要不要出锅 Yashe 这盘菜？要不要炒 Taiyi 这盘菜？）
-# 2. 如果你打钩了相关的机型，它就会拿着你打钩的需求，把订单【直接抛发】给后厨真正的底层流水线（core-build.yml）去当苦力干活。
-#
-# ✨【性能狂魔架构级跃迁】：
-# 以前由于单体架构，电脑只能死板地“先串行切完 Yashe 的菜，再接着切 Taiyi 的菜”。时间叠加！
-# 现在！一旦你两个都勾选，经理立刻发起微服务解耦化多单并发！
-# GitHub 会立即为你免费调拨【两台相互隔离的云端电脑】（一共白嫖 4 核 14 GB算力）
-# 平行、互不干扰地同时做两道菜，总耗时直接被暴力砍掉整整一半！！！
-# =========================================================================================
-
-name: ✨ Build ALL Optional (Yashe & Taiyi) 分发大堂
+name: ✨ Build ALL Optional (Yashe & Taiyi) 串行快线
 
 on:
   repository_dispatch:
   schedule:
-    # 🕒 定时触发：每月 2 号和 16 号的凌晨 2 点 (UTC 18:00) 自动编译一次最新固件。
     - cron: '0 18 2,16 * *'
-  # 🖱️ 用户手动触发环节
   workflow_dispatch:
-    inputs: # 👇 重点来了！这里定义了弹出的菜单问卷！
+    inputs:
       build_yashe:
-        description: "🔥 是否出锅 Yashe 机型固件？ (勾选表示 Yes) 🚀"
+        description: "🔥 是否出锅 Yashe 机型固件？ (勾选表示 Yes)"
         required: true
         type: boolean
         default: true
       build_taiyi:
-        description: "🔥 是否出锅 Taiyi 机型固件？ (勾选表示 Yes) 🚀"
+        description: "🔥 是否出锅 Taiyi 机型固件？ (勾选表示 Yes)"
         required: true
         type: boolean
         default: true
       use_ccache:
-        description: "🧲 读取并复用 ccache 碎片？(如勾选 false = 强制销毁旧仓库重装)"
+        description: "🧲 读取并共用 ccache 碎片？"
         required: false
         type: boolean
         default: true
 
 jobs:
-  # =========================================
-  # 🥘 第一口锅：呼叫后厨出单 Yashe
-  # =========================================
-  dispatch_yashe:
-    # 🪄【If魔法拦截网】：只要它检测到你网页上这道菜没打钩，并且是手动点单来的，这口锅直接不生火了（跳过直接显示绿色空心对号）。如果在定时触发情况下，默认全跑！
-    if: github.event.inputs.build_yashe == 'true' || github.event_name != 'workflow_dispatch'
-    # 📞 核心微服务调用！直接通过极其优雅的本地引用地址，打电话呼叫同目录下的【后厨流水线模型】！
-    uses: ./.github/workflows/core-build.yml
-    # 🧳【包裹参数】：吩咐它去工厂库调起哪份图纸（.configyashe）
-    with:
-      target_name: "Yashe"
-      config_file: ".configyashe"
-      use_ccache: ${{ github.event.inputs.use_ccache == 'true' || github.event_name != 'workflow_dispatch' }}
-
-  # =========================================
-  # 🥘 第二口锅：呼叫后厨出单 Taiyi
-  # =========================================
-  dispatch_taiyi:
-    # 【高能预警】注意，这个子任务和上面的位于同级，没有前后依赖关系！
-    # 这意味着 GitHub Action 的大机器矩阵会自动发现这两口锅，并瞬间同时点火！并驾齐驱！
-    if: github.event.inputs.build_taiyi == 'true' || github.event_name != 'workflow_dispatch'
+  dispatch_combo:
+    # 只要勾选了其中任意一个，我们就启动同源架构联合列车
+    if: github.event.inputs.build_yashe == 'true' || github.event.inputs.build_taiyi == 'true' || github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/core-build.yml
     with:
-      target_name: "Taiyi"
-      config_file: ".configtaiyi"
+      build_yashe: ${{ github.event.inputs.build_yashe == 'true' || github.event_name != 'workflow_dispatch' }}
+      build_taiyi: ${{ github.event.inputs.build_taiyi == 'true' || github.event_name != 'workflow_dispatch' }}
       use_ccache: ${{ github.event.inputs.use_ccache == 'true' || github.event_name != 'workflow_dispatch' }}
