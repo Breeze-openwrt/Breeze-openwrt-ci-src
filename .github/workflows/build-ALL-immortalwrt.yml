@@ -1,388 +1,73 @@
+# =========================================================================================
+# 🎓【初二小白课堂：源码阅读与赏析】 - build-ALL-immortalwrt.yml (前台经理)
+# 
+# 📘【剧本背景】：
+# 这曾经是一本长达 400 行、包含了杀猪洗菜生火全套流程的极其臃肿的“清明上河图”。
+# 哪怕你只是想改一下时区，在密密麻麻的乱码丛林里都难以下手。
+# 现在，它升职成了纯高管级别的“前台点单大堂经理”！
 #
-# Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
+# 🕵️‍♂️【作者意图】：
+# 它的作用变得极其纯粹且傲慢：
+# 1. 在网页上为你画出打钩的问卷（你要不要出锅 Yashe 这盘菜？要不要炒 Taiyi 这盘菜？）
+# 2. 如果你打钩了相关的机型，它就会拿着你打钩的需求，把订单【直接抛发】给后厨真正的底层流水线（core-build.yml）去当苦力干活。
 #
-# This is free software, licensed under the MIT License.
-# See /LICENSE for more information.
-#
-# https://github.com/P3TERX/Actions-OpenWrt
-# Description: Build OpenWrt using GitHub Actions
-#
-# -----------------------------------------------------------------------------
-# 🌟 源码阅读与设计赏析：这是一份“豪华前台点单式”编译流水线配置！
-#    【作者意图】：为了不破坏原有的文件，我们新建了它。并赋予了它【互动式】的生命！
-#    【核心黑科技 - `workflow_dispatch: inputs`】：
-#         我们将网页上的手动触发按钮做了魔改，给你加上了“勾选菜单”。
-#         想煮哪口锅的饭（Yashe 还是 Taiyi），你自己勾选，下面的流程就能像听话的厨子一样：
-#         勾了谁，就启动哪套图纸(.config)下载和编译；都勾了体验双倍快乐，不勾选的地方直接被 `if:` 魔法跳掉省电！
-#
-#    🚨 【重大避坑警告 - 关于“蹭饭(缓存复用)”的前提条件】：
-#         为什么 Yashe 编完再编 Taiyi 能这么快不报错？
-#         答：因为它们使用的是同一套架构的 CPU（联发科 Filogic 系列 MT7986/MT7981），它们的底层交叉编译工具链
-#         和 C语言基础库是【完全一模一样】的！OpenWrt 系统聪明地发现底层不用重造，就只花几分钟补齐了不一样的上层软件。
-#         **千万不要**在这里把两个 CPU 架构完全不同（比如一个是 X86_64 电脑，一个是 高通ARM）的固件放在同一次流水线里紧挨着编！
-#         如果跨架构强行“不洗锅就炒下道菜”，旧的底层文件会把新系统毒死，导致疯狂报错编译失败！
-# -----------------------------------------------------------------------------
+# ✨【性能狂魔架构级跃迁】：
+# 以前由于单体架构，电脑只能死板地“先串行切完 Yashe 的菜，再接着切 Taiyi 的菜”。时间叠加！
+# 现在！一旦你两个都勾选，经理立刻发起微服务解耦化多单并发！
+# GitHub 会立即为你免费调拨【两台相互隔离的云端电脑】（一共白嫖 4 核 14 GB算力）
+# 平行、互不干扰地同时做两道菜，总耗时直接被暴力砍掉整整一半！！！
+# =========================================================================================
 
-name: ✨ Build ALL Optional (Yashe & Taiyi) # 🏷️ 给这份新工作流起个闪亮的名字，好在 Actions 列表区分
+name: ✨ Build ALL Optional (Yashe & Taiyi) 分发大堂
 
 on:
   repository_dispatch:
   schedule:
     # 🕒 定时触发：每月 2 号和 16 号的凌晨 2 点 (UTC 18:00) 自动编译一次最新固件。
-    # 刻意与防沉迷脚本(1号)和缓存起搏器(*/5)的时辰错峰开来，且完全自动化保持固件代差更新。
     - cron: '0 18 2,16 * *'
-  workflow_dispatch: # 🖱️ 用户手动触发环节
+  # 🖱️ 用户手动触发环节
+  workflow_dispatch:
     inputs: # 👇 重点来了！这里定义了弹出的菜单问卷！
       build_yashe:
-        description: "🔥 是否编译 Yashe 固件？ (打个勾表示 Yes)" # 给普通玩家看的大白话说明
-        required: true    # 这道题必须回答！
-        type: boolean     # 答案类型：对错题（也就是网页上会渲染成一个打钩的小框框）
-        default: true     # 默认建议勾上
+        description: "🔥 是否出锅 Yashe 机型固件？ (勾选表示 Yes) 🚀"
+        required: true
+        type: boolean
+        default: true
       build_taiyi:
-        description: "🔥 是否编译 Taiyi 固件？ (打个勾表示 Yes)"
+        description: "🔥 是否出锅 Taiyi 机型固件？ (勾选表示 Yes) 🚀"
         required: true
         type: boolean
         default: true
       use_ccache:
-        description: "🧲 读取并复用 ccache 碎片？(选 false = 强制砸碎重配新缓存)"
+        description: "🧲 读取并复用 ccache 碎片？(如勾选 false = 强制销毁旧仓库重装)"
         required: false
         type: boolean
         default: true
 
-env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多常用的常量封印到这）
-  REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
-  REPO_BRANCH: main
-  FEEDS_CONF: feeds.conf.default
-  # 我们这里删掉了固定的 CONFIG_FILE，因为下面会根据你打钩的情况给系统智能派发
-  DIY_P1_SH: diy-part1.sh
-  DIY_P2_SH: diy-part2.sh
-  UPLOAD_BIN_DIR: true    # 📤 是否把全量的碎片化 `.ipk` 零件也包圆带走？
-  UPLOAD_FIRMWARE: true   # 📤 是否把能刷机的核心精髓固件输出发布？
-  UPLOAD_RELEASE: true    # 🚀 是否最后光荣挂榜（生成 Release 展示下载页面）
-  TZ: Asia/Shanghai       # 🕰️ 对时准星校对！防止你生成的发布因为美国时间导致记录错乱
-  # 🚀 【Node.js 24 全局引擎强制开关】：提前应对 GitHub 未来政策，强制所有脚本机器人在最高等级的 24 号引擎版本上运行，剿灭过时警告。
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
-  build:
-    runs-on: ubuntu-22.04 # 🖥️ 我们云端的干活肉鸡（底层环境），自带 2 核 CPU。
-    env: # 🏢 Job 层级环境变量：这就像是在具体工位的桌子上贴了层最高指令
-      # 🗂️ 全局动态变量占位符（消除 IDE 的未声明警告，后续运行中会被脚本塞入真实数据）
-      WORK_DIR: /workdir
-      FILE_DATE: _fallback_date
-      FIRMWARE: /workdir/firmware
+  # =========================================
+  # 🥘 第一口锅：呼叫后厨出单 Yashe
+  # =========================================
+  dispatch_yashe:
+    # 🪄【If魔法拦截网】：只要它检测到你网页上这道菜没打钩，并且是手动点单来的，这口锅直接不生火了（跳过直接显示绿色空心对号）。如果在定时触发情况下，默认全跑！
+    if: github.event.inputs.build_yashe == 'true' || github.event_name != 'workflow_dispatch'
+    # 📞 核心微服务调用！直接通过极其优雅的本地引用地址，打电话呼叫同目录下的【后厨流水线模型】！
+    uses: ./.github/workflows/core-build.yml
+    # 🧳【包裹参数】：吩咐它去工厂库调起哪份图纸（.configyashe）
+    with:
+      target_name: "Yashe"
+      config_file: ".configyashe"
+      use_ccache: ${{ github.event.inputs.use_ccache == 'true' || github.event_name != 'workflow_dispatch' }}
 
-    steps:
-      - name: Checkout # 1️⃣：下发检出指令，去咱们的库房把上面的那些自定义脚本全拖到肉机里来
-        # ✨ 追捕时代最前沿：摒弃不稳定且解析慢的 @main，直接使用稳定的纯净最新大版本 @v4
-        uses: actions/checkout@v6
-
-      - name: Free Disk Space (Ubuntu) # 2️⃣：强力拆迁队打扫战场 (性能狂魔原生秒杀版)
-        # ✨ 性能狂魔终极优化：抛弃了原来那个极其臃肿、喜欢磨洋工耗时达 3~5 分钟的第三方扫地大妈 jlumbroso 插件。
-        # 这里直接动用原生极其暴力的超级指令，一秒钟瞬间抹除系统出厂自带的安卓、.NET 和 Haskell 等高达 30GB 的重型沉睡工厂！无情释放空间！
-        run: |
-          echo "📊 强力拆迁前系统总可用空间："
-          df -hT
-          
-          echo "🧨 警告：正在引爆云端的旧有原厂巨兽建筑..."
-          # 核心庞大出厂建筑包 (瞬间斩杀释放极限空间)
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          # 附加累赘工具包 (零秒并发切割)
-          sudo rm -rf /usr/local/share/boost /usr/share/swift /usr/lib/jvm /usr/share/miniconda /usr/local/share/chromium
-          sudo docker image prune --all --force
-          
-          echo "🎉 新世界建筑彻底清除完毕，已达到物理理论上的清理极值！耗时仅几秒！"
-          echo "📊 强力拆迁后系统总可用空间对比（见证白嫖的奇迹）："
-          df -hT
-
-      - name: Initialization environment # 3️⃣：熬底汤 - 装载海量交叉编译需要的支持库（这是在装车间机器）
-        env:
-          DEBIAN_FRONTEND: noninteractive # 🤖【机器人模式光环】: 有任何弹窗问“是/否”一律默认执行免卡死模式！
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android
-
-          # ✨ 性能狂魔绝杀：合并 60 余行垃圾冗余重复的安装指令，解放服务器 I/O！
-          # GitHub Action 的新机器其实已经很干净了，不需要上来先全盘跑好几圈升级（纯浪费生命）。
-          # 🛡️ 终极屏蔽：强制切断所有 --no-install-recommends (不下载配套教程和无用推流模块，只装干货核心)，再减几分钟体积！
-          sudo -E apt-get -qq update
-          sudo -E apt-get -qq install -y --no-install-recommends \
-            eatmydata ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-            bzip2 cargo ccache cdrkit-doc clang cmake cpio curl dejagnu device-tree-compiler \
-            dos2unix ecj expect fastjar flex g++ g++-multilib gawk gcc gcc-multilib gettext \
-            ghc git golang gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 \
-            libelf-dev libfido2-dev libffi-dev libfuse-dev libglib2.0-dev libgmp-dev libgmp3-dev \
-            libltdl-dev libltdl7 libmpc-dev libmpfr-dev libncurses-dev libncurses5-dev \
-            libncursesw5-dev libpcre2-dev libpcre3-dev libpython3-dev libreadline-dev libssl-dev \
-            libtext-unidecode-perl libtool libxml-libxml-perl libxml-namespacesupport-perl \
-            libxml-sax-base-perl libxml-sax-perl libyaml-dev libz-dev lld llvm lrzsz luajit \
-            luarocks make mkisofs msmtp nano ncurses-dev ninja-build openjdk-11-jdk p7zip \
-            p7zip-full patch pkgconf pybind11-dev python2.7 python3 python3-dev python3-docutils \
-            python3-pip python3-ply python3-pyelftools python3-setuptools qemu-utils re2c rsync \
-            ruby-dev rustc scons sgml-base squashfs-tools subversion swig tcl-expect tcl8.6 \
-            tex-common texinfo uglifyjs unzip upx-ucl vim wget wodim xmlto xxd zlib1g-dev zstd
-          
-          # 清理一下安装产生的无用骨架碎片
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
-          
-          # 校准电脑内时间
-          sudo timedatectl set-timezone "$TZ"
-          
-          # ==================== 💎 性能狂魔：异星寻宝系统（硬盘智能调度）====================
-          echo "🔍 正在进行全盘雷达扫描，寻找空间最大、性能最顶的非系统数据挂载盘..."
-          
-          # 算法说明：遍历系统中所有块存储 (/dev/*)
-          # 排除了 / (核心系统主盘)、loop (虚拟盘)、boot 等。
-          # 底线门槛：只要挂载点可用空间 > 20000MB (20GB，保证编译 OpenWrt 绝不因空间不足爆缸死机)。
-          # 从这些合格的独立硬盘里，选拔出剩余空间最大的一个把它设为唯一的编译中心！
-          BEST_DISK=$(df -mP | awk 'NR>1 && $1 ~ /^\/dev\// && $6 != "/" && $6 !~ /boot/ && $4 > 20000 {print $6, $4}' | sort -nr -k2 | awk 'NR==1 {print $1}')
-          
-          if [ -n "$BEST_DISK" ]; then
-            echo "🎉 雷达锁定！发掘出一块满足编译大容量需求的极品额外数据盘: ${BEST_DISK}，I/O 起飞！"
-            export BEST_WORKDIR="${BEST_DISK}/workdir"
-          else
-            echo "⚠️ 未探知到符合空间安全红线（>20GB）的额外数据副盘。启用最高性能的原生大容量主干系统盘代替..."
-            export BEST_WORKDIR="/workdir"
-          fi
-          
-          echo "🚀 最终裁定的核心编译军工厂坐标为：$BEST_WORKDIR"
-          sudo mkdir -p "$BEST_WORKDIR"
-          sudo chown $USER:$GROUPS "$BEST_WORKDIR"
-          
-          # 把这把黄金钥匙塞进全局广播频道，下发到后续所有的剧本和机器线上执行：
-          echo "WORK_DIR=$BEST_WORKDIR" >> $GITHUB_ENV
-
-      - name: Clone source code # 4️⃣：去把 OpenWrt 的源代码大库房全须全根拉过来
-        # 👑 抛弃原来死板的编码设定，全自动跟随上一步智能雷达挑选出的最佳数据盘基地
-        working-directory: ${{ env.WORK_DIR }}
-        run: |
-          echo "📊 当前目标工作基地所在盘符的具体容量雷达图："
-          df -hT $PWD
-          git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
-          ln -sf ${{ env.WORK_DIR }}/openwrt $GITHUB_WORKSPACE/openwrt
-
-      - name: Load custom feeds # 5️⃣：导入个人定制的商店源连接
-        run: |
-          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
-          chmod +x $DIY_P1_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P1_SH
-
-      - name: Update feeds # 6️⃣：让库房向外网商店下达目录更新请求
-        run: cd openwrt && ./scripts/feeds update -a
-
-      - name: Install feeds # 7️⃣：把我们订阅的所有小插件的目录都安装落户过来
-        run: cd openwrt && ./scripts/feeds install -a
-
-      - name: Load custom configuration # 8️⃣：上自己的“微调小特权”
-        run: |
-          [ -e files ] && mv files openwrt/files
-          chmod +x $DIY_P2_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P2_SH
-
-
-      - name: Restore Ccache directory # 🧲 C++ 编译碎片金库：尝试拉取老本！
-        # 🛡️ 只有当用户勾选了复用缓存时，我们才去云端尝试下载。否则直接全新开始！
-        if: github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == ''
-        uses: actions/cache/restore@v5
-        with:
-          path: openwrt/.ccache
-          # 👑 我们彻底抛弃了乱码随机后缀，从此全服只有一个王储名字：latest
-          key: ${{ runner.os }}-openwrt-ccache-latest
-
-      # ================== 👇 核心高能区域：买菜洗菜环节 ==================
-      - name: Prepare & Download (Yashe) # 🛒 检测：如果是点单选了 Yashe，那就按照它的菜单出击采购！
-        id: package_yashe
-        if: ${{ github.event.inputs.build_yashe == 'true' }} # 🪄 【If魔法】必须打勾，否则不执行
-        run: |
-          cd openwrt
-          cp $GITHUB_WORKSPACE/.configyashe .config
-          # 🎛️ 性能狂魔洗炉机制：无论前端是否选择读取旧缓存，一旦开喷底层必须强制开启 Ccache 引擎收集新鲜碎片！
-          # 【史诗级大坑修复1】在 Openwrt 里开启 Ccache，它硬性依赖开发者选项，如果不加 CONFIG_DEVEL=y，在执行 make defconfig 时系统会自动判定依赖缺失，然后把你辛苦加上的 CONFIG_CCACHE 给静默删掉！
-          echo "CONFIG_DEVEL=y" >> .config
-          echo "CONFIG_CCACHE=y" >> .config
-          make defconfig
-          # 🖧 极速网卡榨取：将下载单通道猛增至 16 并发，彻底塞满 GitHub Action 的超级内网大宽带！
-          make download -j16
-          # ✨ 文件 I/O 底层斩杀：抛弃低效的 -exec 循环发包（区区几百个空文件会瞬间卡出系统几百次 fork 分岔），直接用底层内置的 -delete 瞬间归零！
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -delete
-          
-      - name: Prepare & Download (Taiyi) # 🛒 检测：如果是选了 Taiyi，我们把特需它的零件给去下载回来！
-        id: package_taiyi
-        if: ${{ github.event.inputs.build_taiyi == 'true' }} # 🪄 【If魔法】必须打勾，否则不执行
-        run: |
-          cd openwrt
-          cp $GITHUB_WORKSPACE/.configtaiyi .config
-          # 🎛️ 性能狂魔洗炉机制：无论前端是否选择读取旧缓存，一旦开喷底层必须强制开启 Ccache 引擎收集新鲜碎片！
-          # 【史诗级大坑修复1】在 Openwrt 里开启 Ccache，它硬性依赖开发者选项，如果不加 CONFIG_DEVEL=y，在执行 make defconfig 时系统会自动判定依赖缺失，然后把你辛苦加上的 CONFIG_CCACHE 给静默删掉！
-          echo "CONFIG_DEVEL=y" >> .config
-          echo "CONFIG_CCACHE=y" >> .config
-          make defconfig
-          # 🖧 极速网卡榨取：将下载单通道猛增至 16 并发，彻底塞满 GitHub Action 的超级内网大宽带！
-          make download -j16
-          # ✨ 文件 I/O 底层斩杀：抛弃低效的 -exec 循环发包（区区几百个空文件会瞬间卡出系统几百次 fork 分岔），直接用底层内置的 -delete 瞬间归零！
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -delete
-
-      # ================== 👇 核心火力烹饪环节 ==================
-      - name: Compile the Yashe firmware # 🍳 Yashe 开煮！
-        id: compile_yashe
-        if: ${{ github.event.inputs.build_yashe == 'true' }} # 只会在你勾选后启动
-        run: |
-          cd openwrt
-          cp $GITHUB_WORKSPACE/.configyashe .config
-          # 【史诗级大坑修复2】在最终编译阶段，原工作流习惯性再次 cp 覆盖 .config，这会导致前面下载阶段开启的 ccache 设置被完全擦除！必须在此处重磅再次注入！
-          echo "CONFIG_DEVEL=y" >> .config
-          echo "CONFIG_CCACHE=y" >> .config
-          make defconfig
-          echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程以榨干 CPU 物理算力全力铸造 Yashe 固件..."
-          # ✨ 性能狂魔极致榨干：由于 I/O 存在空窗期，$(nproc) + 1 能够让双核 CPU 永远处于满载不歇车状态。
-          # 🛡️ 引入断崖 Debug 机制：一旦因为代码报错，立刻切换单核带 V=s 详细日志跑一次就停，拒绝原来那种浪费几十倍时间的 6 连无脑重复试错！
-          # ☢️ 终极核弹级黑魔法【eatmydata 拦截注入】：暴力接管系统底层 libc，把所有拖慢编译的 fsync() 安全落盘指令全拦截为 no-op 空气假动作。
-          # 你的磁盘从此将处于“物理裸奔”级别的仅内存异步无等待写入状态（在必定会一轮终结的 CI 镜像中压根不用考虑断电保护落盘），让编译器 iowait 并发卡顿立刻物理清零，形成降维打击！
-          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Compile the Taiyi firmware # 🍳 Taiyi 开煮！如果我们上面全勾选，这波因为蹭了饭（环境共用），它将光速完工！
-        id: compile_taiyi
-        if: ${{ github.event.inputs.build_taiyi == 'true' }} # 只会在你勾选后启动
-        run: |
-          cd openwrt
-          cp $GITHUB_WORKSPACE/.configtaiyi .config
-          # 【史诗级大坑修复2】在最终编译阶段，原工作流习惯性再次 cp 覆盖 .config，这会导致前面下载阶段开启的 ccache 设置被完全擦除！必须在此处重磅再次注入！
-          echo "CONFIG_DEVEL=y" >> .config
-          echo "CONFIG_CCACHE=y" >> .config
-          make defconfig
-          echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程以榨干 CPU 物理算力全力铸造 Taiyi 固件..."
-          # ✨ 性能狂魔极致榨干：由于 I/O 存在空窗期，$(nproc) + 1 能够让双核 CPU 永远处于满载不歇车状态。
-          # 🛡️ 引入断崖 Debug 机制：一旦因为代码报错，立刻切换单核带 V=s 详细日志跑一次就停，拒绝原来那种浪费几十倍时间的 6 连无脑重复试错！
-          # ☢️ 终极核弹级黑魔法【eatmydata 拦截注入】：暴力接管系统底层 libc，把所有拖慢编译的 fsync() 安全落盘指令全拦截为 no-op 空气假动作。
-          # 你的磁盘从此将处于“物理裸奔”级别的仅内存异步无等待写入状态（在必定会一轮终结的 CI 镜像中压根不用考虑断电保护落盘），让编译器 iowait 并发卡顿立刻物理清零，形成降维打击！
-          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
-
-          # 【统一打时间戳标记】 因为这是有可能运行的最后一步编译
-          echo "status=success" >> $GITHUB_OUTPUT
-      
-      - name: Generate timestamp # 🏷️ 制作出生证明：记录这一刻的时间戳
-        # 移除 !cancelled() 条件，确保只在编译成功后才打日期标
-        run: |
-          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
-      - name: Check space usage # 🔍 硬盘体检
-        run: df -hT
-
-      - name: Upload bin directory # 📦 收废品（收集所有安装包）
-        uses: actions/upload-artifact@v6
-        # 只要你勾选的任一主线跑成功了我们都吸，防断连
-        if: (steps.compile_yashe.outputs.status == 'success' || steps.compile_taiyi.outputs.status == 'success') && env.UPLOAD_BIN_DIR == 'true'
-        with:
-          name: OpenWrt_bin${{ env.FILE_DATE }}
-          path: openwrt/bin
-
-      - name: Organize ALL output files # 🧲 万磁王：全范围收割成品刷机包
-        id: organize
-        # 🛡️ 【熔断机制】：只要 Yashe 或 Taiyi 任意一个编译成功，且你开启了上传，才继续
-        if: (steps.compile_yashe.outputs.status == 'success' || steps.compile_taiyi.outputs.status == 'success') && env.UPLOAD_FIRMWARE == 'true'
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/firmware
-          # 这里用通配符 `*` 可以把你之前成功编译的所有固件一锅端
-          cp -r openwrt/bin/targets/*/*/*.* $GITHUB_WORKSPACE/firmware/ 2>/dev/null || true
-          rm -rf $GITHUB_WORKSPACE/firmware/packages
-          echo "FIRMWARE=$GITHUB_WORKSPACE/firmware" >> $GITHUB_ENV
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Upload firmware directory # 📦 【内部发货】
-        uses: actions/upload-artifact@v6
-        if: steps.organize.outputs.status == 'success'
-        with:
-          name: OpenWrt_Custom_firmware_Package${{ env.FILE_DATE }}
-          path: ${{ env.FIRMWARE }}
-
-      - name: Generate release tag
-        id: tag
-        if: env.UPLOAD_RELEASE == 'true'
-        run: |
-          echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-          touch release.txt
-          echo "🎉 新鲜出炉的 OpenWrt 专有编译固件发行版！您可以根据需求挑选心仪的设备固件哦。 " >> release.txt
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Upload firmware to release # 🚀 极速光年发射 (原生黑客版)
-        # ✨ 性能狂魔安全升级：彻底手刃由于第三方 NodeJS 插件带来的 0day 风险和加载速度拖慢，强制接入原生最高效的 OS 级骨干命令！
-        if: steps.tag.outputs.status == 'success'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "🚀 启动 GitHub 原生核心引擎进行最终极的固件发版与全量部署..."
-          gh release create "${{ steps.tag.outputs.release_tag }}" \
-            --title "OpenWrt 纯净固件发行版 ${{ steps.tag.outputs.release_tag }}" \
-            --notes-file release.txt \
-            ${{ env.FIRMWARE }}/*
-          echo "🎉 终极发射圆满结束！所有卓越的交叉编译固件均已硬化在您的 Release 专属展区。"
-
-      - name: Show Ccache Statistics # 📊 验收大赏：查阅本次编译命中率！
-        if: always()
-        run: |
-          echo "========= Ccache 极限压榨金库战果 ========="
-          # 提取 OpenWrt 内部交叉编译好的原生宿主机 ccache 分析器，强制提取它刚才的所有拦截记录！
-          if [ -x "openwrt/staging_dir/host/bin/ccache" ]; then
-            env CCACHE_DIR=$GITHUB_WORKSPACE/openwrt/.ccache openwrt/staging_dir/host/bin/ccache -s
-          else
-            echo "⚠️ 未找到编译后内网的 ccache 面板（可能首轮大循环未构建成功）。"
-          fi
-          echo "================================================="
-
-      - name: 🧹 Rebuild Ccache Throne # 🧹 为金库新王登基彻底清空王座！
-        if: success()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "🔍 正在执行极简化缓存策略：抹除云端所有存在的 ccache 缓存，确保新版能100%成功覆盖写入..."
-          
-          # 利用原生命令删除固定名称的最新缓存（不管有没有，闭眼轰炸一次出空位）
-          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-ccache-latest \
-            | jq -r '.actions_caches[].id' \
-            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
-            
-          # 以防万一，顺手剿灭以前残留的所有乱码旧版怪胎
-          gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
-            | jq -r '.actions_caches[] | select(.key | startswith("${{ runner.os }}-openwrt-ccache-")) | .id' \
-            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
-            
-          echo "🎉 旧王座已被彻底清空！云端现在洁净如纸！"
-
-      - name: Save Updated Ccache # 💾 保存并升级金库！
-        # 无论前面是读了旧缓存后更新的，还是全新生成的，我们最后都统一把它当做 latest 供奉到云端！
-        if: success()
-        uses: actions/cache/save@v5
-        with:
-          path: openwrt/.ccache
-          # 👑 赐名 latest，独霸云端，天下仅此一份！
-          key: ${{ runner.os }}-openwrt-ccache-latest
-
-      - name: Delete workflow runs # 🧹 清理流水线死尸记录 (高并发阵列版)
-        # ✨ 性能狂魔合并发包术：将系统 API 请求数量暴降 99%！
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 1. 之前是 xargs -I {} 发起循环，50 个包就要跟 GitHub 发 50 次又臭又长的 HTTP 删除请求，网速极慢。
-          # 2. 我们扒掉了 -I {} ，彻底激活 xargs 数组体！它会像推土机一样把所有的 ID 打成一个包：`gh run delete ID1 ID2 ID3...`
-          # 无论云端有多少个死记录，现在只发 1 次请求就能一秒连坐九族直接铲平！
-          gh run list --limit 500 --json databaseId -q '.[].databaseId' | tail -n +36 | xargs -r gh run delete || true
-
-      - name: Remove old Releases # 定时清理旧发布
-        # ✨ 性能狂魔绝杀之二：用 shell 截取直接代替臃肿的开源插件
-        if: env.UPLOAD_RELEASE == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 列出发布时间线，保护扩容至最新的 30 个“精品固件包档案”（为你的路由器留足历史回滚版本），对其余的老古董实行无情抹除！连同对应标签一起拔除。
-          tags=$(gh release list -L 100 | awk -F '\t' '{print $1}' | tail -n +31)
-          if [ -n "$tags" ]; then
-            for tag in $tags; do
-              echo "🗑️ 正在清除史前发版: $tag"
-              gh release delete "$tag" --cleanup-tag -y || true
-            done
-          fi
+  # =========================================
+  # 🥘 第二口锅：呼叫后厨出单 Taiyi
+  # =========================================
+  dispatch_taiyi:
+    # 【高能预警】注意，这个子任务和上面的位于同级，没有前后依赖关系！
+    # 这意味着 GitHub Action 的大机器矩阵会自动发现这两口锅，并瞬间同时点火！并驾齐驱！
+    if: github.event.inputs.build_taiyi == 'true' || github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/core-build.yml
+    with:
+      target_name: "Taiyi"
+      config_file: ".configtaiyi"
+      use_ccache: ${{ github.event.inputs.use_ccache == 'true' || github.event_name != 'workflow_dispatch' }}

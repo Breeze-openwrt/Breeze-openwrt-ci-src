@@ -1,0 +1,203 @@
+# =========================================================================================
+# 🎓【初二小白课堂：源码阅读与赏析】 - core-build.yml (后厨核心流水线)
+# 
+# 📘【剧本背景】：
+# 这是一条被别人召唤才工作的“被动流水线”。它可以被复用无数次。
+# 比如主人在前台下达指令“给我出锅一个 Yashe”，这条流水线就会按照标准流程起锅烧油。
+# 如果再去命令“出锅一个 Taiyi”，它又会自动开辟另一台云服务器，一模一样做一遍。非常现代化的微服务思维！
+# 
+# 🕵️‍♂️【作者意图】：
+# 在这个文件里，我们将原本长达近四百行的单体架构中的重复代码，提炼为一份共用模块。
+# 并把大量的 Shell 骇客代码抛给了咱们刚刚写好的 `scripts/*.sh` 来外包执行，让流水平整如镜！
+# =========================================================================================
+
+name: WRT-CORE
+
+on:
+  workflow_call:
+    inputs:
+      target_name:
+        required: true
+        type: string
+        description: "机器型号名称，例如 Yashe 或 Taiyi 🚀"
+      config_file:
+        required: true
+        type: string
+        description: "该机型对应的极品图纸文件名，例如 .configyashe 📜"
+      use_ccache:
+        required: true
+        type: boolean
+        description: "是否允许翻翻旧箱底使用过去的 Ccache 缓存金库 🧲"
+
+env:
+  REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
+  REPO_BRANCH: main
+  FEEDS_CONF: feeds.conf.default
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  UPLOAD_BIN_DIR: true    # 📤 是否保存零碎 ipk 发动机零件
+  UPLOAD_FIRMWARE: true   # 📤 是否把核心固件向外展示发送
+  UPLOAD_RELEASE: true    # 🚀 是否挂出展示区正式发版
+  TZ: Asia/Shanghai       # 🕰️ 防止在东八区发版，时间戳却标记为美国时间的时区混编大坑
+
+jobs:
+  core:
+    # 定义我们的流水线工人牌号（会漂亮地显示在 GitHub 的绿框中）
+    name: ${{ inputs.target_name }} 编译生产线
+    runs-on: ubuntu-22.04 # 🖥️ 我们使用的是 2 核云端打工肉鸡
+    steps:
+      - name: Checkout # 1️⃣：检出。去你们的代码仓库拖回所有的初始剧本文件（包括我们的 scripts）
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space (Ubuntu) # 2️⃣：呼叫外包的超级大妈打扫厂房
+        # ✨ 【模块化剥离执行】：咱们直接运行刚抽出来的清理脚本，界面上连个标点符号多余的都不需要写。
+        run: bash $GITHUB_WORKSPACE/scripts/clean_ubuntu.sh
+
+      - name: Initialization environment # 3️⃣：熬底汤 - 装载海量交叉编译系统所需的各类工具
+        # 💎 这里会静默运行带有极其复杂的“异星雷达扫描盘符”机制的新脚本。
+        # 它的末尾会将找到的风水宝地自动写进 $GITHUB_ENV 环境总栈里！
+        run: bash $GITHUB_WORKSPACE/scripts/init_env.sh
+
+      - name: Check space usage # 🔍 硬盘体检 (看一眼，求个心理安慰)
+        run: df -hT
+
+      - name: Clone source code # 4️⃣：去 Github 远端把官方的 OpenWrt 大本营源代码拉过来
+        # 👑 性能狂魔极致优化：直接命令 Git 命令去上面脚本雷达发现的、拥有最空旷环境的高速盘符 ($WORK_DIR) 去开展大营。
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+          git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+          # 建立软链接，就像是给位于高速 D 盘的文件夹，在原本的系统 C 盘建个原名称快捷方式，让后面的步骤完全不用改路径代码！
+          ln -sf ${{ env.WORK_DIR }}/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Load custom feeds # 5️⃣：导入各位大佬们自己写的插件商城源
+        run: |
+          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+          chmod +x $DIY_P1_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P1_SH
+
+      - name: Update and Install feeds # 6️⃣：让总服务器向这些野外商城发请求进货安装目录结构
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Load custom configuration # 7️⃣：给源码上微调小特权（DIY 魔改）
+        run: |
+          [ -e files ] && mv files openwrt/files
+          chmod +x $DIY_P2_SH
+          cd openwrt
+          $GITHUB_WORKSPACE/$DIY_P2_SH
+
+      - name: Restore Ccache directory # 🧲 开炉之前，先去天顶试图找回上次炼成的金丹！
+        if: inputs.use_ccache == true
+        uses: actions/cache/restore@v4
+        with:
+          path: openwrt/.ccache
+          key: ${{ runner.os }}-openwrt-ccache-latest
+
+      - name: Pre-assembly and Download Packages # 🛒 图纸熔合与下载发包
+        run: |
+          cd openwrt
+          
+          # 【解绑与治愈旧疾的大修部分】：以往的流水线因为重复 cp 图纸覆盖，导致开挂选项总被擦除。
+          # 现在我们采用积木拼接：先拿前台发来的图纸打底，然后再用咱们新建的 Config/common.txt 中的全局高性能开启指令去盖章缝合。
+          cp $GITHUB_WORKSPACE/${{ inputs.config_file }} .config
+          cat $GITHUB_WORKSPACE/Config/common.txt >> .config
+          
+          # 这里就是核对所有的需求，生成一份标准的建造手册（MakeFile 的前置准备）
+          make defconfig
+          
+          echo "🛒 开始挂载高并发网卡信道极速下载外网库..."
+          make download -j16
+          
+          # 【底层文件 IO 屠杀】：利用 find 底层系统的 -delete 超强清零，瞬间把没下好的残缺空文件干碎！（防止卡流程）
+          find dl -size -1024c -delete
+
+      - name: Compile the Firmware # 🍳 性能狂魔炼丹炉：全境燃火！
+        run: |
+          cd openwrt
+          echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程火力，以榨干 CPU 所有物理算力去铸造 ${{ inputs.target_name }} 固件..."
+          
+          # ☢️ 终极核弹级黑魔法【eatmydata 拦截注入】+【断崖抛错机制】:
+          # `eatmydata`：暴力接管了底层的保存硬盘的请求，全部把它拦下放在纯内存中，硬盘读取灯瞬间熄灭，没有排队写入瓶颈！
+          # `||`: 如果你前面的多核飙车突然翻车（语法错了），立马老老实实地回退到“单线程”且显示所有日志 (-j1 V=s) 再走一遍报出错误，决不让你盲猜死机！
+          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
+
+      - name: Global Variables Registry # 🏷️ 将成品的生产标签向全国系统广播注册
+        id: vars
+        run: |
+          # 集中把精确到分的出炉时间打印成唯一商标
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+          # 告诉后面的打包老铁：“我这里没翻车，来拉货吧！”
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Organize output files # 🧲 万磁王：拉起围网把刚才打的所有鱼全部捞走！
+        id: organize
+        if: steps.vars.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/firmware
+          # 通配符 `*` 可以一次性把任何目录下符合结果的大宝贝全端到咱们设定的发货台上。
+          cp -r openwrt/bin/targets/*/*/*.* $GITHUB_WORKSPACE/firmware/ 2>/dev/null || true
+          # 删除那个杂碎包目录，不需要发这种占地方的东西。
+          rm -rf $GITHUB_WORKSPACE/firmware/packages
+          echo "FIRMWARE=$GITHUB_WORKSPACE/firmware" >> $GITHUB_ENV
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware directory # 📦 【内部库发货】向你在 GitHub 看到的那一堆 Artifacts 里放置下载框
+        uses: actions/upload-artifact@v4
+        if: steps.organize.outputs.status == 'success'
+        with:
+          # 此处用到了外层参数传进来的名字，让每个设备的下载框互不干扰！
+          name: OpenWrt_Firmware_${{ inputs.target_name }}${{ env.FILE_DATE }}
+          path: ${{ env.FIRMWARE }}
+
+      - name: Generate release tag
+        id: tag
+        if: env.UPLOAD_RELEASE == 'true'
+        run: |
+          # 发出全球喇叭：这是我今天几点几分出炉的什么肉串（Yashe还是Taiyi）！
+          echo "release_tag=$(date +"%Y.%m.%d-%H%M")-${{ inputs.target_name }}" >> $GITHUB_OUTPUT
+          touch release.txt
+          echo "🎉 新鲜出炉的 OpenWrt [${{ inputs.target_name }}] 专有编译固件极速发行版！ " >> release.txt
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Deploy Release # 🚀 极速光年发射，正式向世界宣告发版！
+        if: steps.tag.outputs.status == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 这里的 `gh release create` 调用的原底层的 GitHub 命令行大炮，比别人使用的带各种 BUG 的 NodeJS 第三方扩展稳多了！
+          gh release create "${{ steps.tag.outputs.release_tag }}" \
+            --title "OpenWrt 纯净发行版 [${{ inputs.target_name }}]" \
+            --notes-file release.txt \
+            ${{ env.FIRMWARE }}/*
+
+      - name: Show Ccache Statistics # 📊 验收大赏：查阅本次从旧金丹里蹭到了多少好货！
+        if: inputs.use_ccache == true
+        run: |
+          echo "========= Ccache 极限压榨金库战果 ========="
+          # 读取内核给的拦截分析文件提取报告。
+          if [ -x "openwrt/staging_dir/host/bin/ccache" ]; then
+            env CCACHE_DIR=$GITHUB_WORKSPACE/openwrt/.ccache openwrt/staging_dir/host/bin/ccache -s
+          fi
+
+      - name: Rebuild Ccache Throne # 🧹 申请保洁阿姨，动用极其残暴的雷霆之力把云端的所有旧王座席卷一空
+        if: success() && inputs.use_ccache == true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # 一句顶原来的十几句，而且代码和逻辑都被封装起来不污眼了！
+        run: bash $GITHUB_WORKSPACE/scripts/ccache_manager.sh
+
+      - name: Save Updated Ccache # 💾 保存并给这套最热乎最新鲜的模具登基！
+        if: success() && inputs.use_ccache == true
+        uses: actions/cache/save@v4
+        with:
+          path: openwrt/.ccache
+          key: ${{ runner.os }}-openwrt-ccache-latest
+
+      - name: Clean Workflow Runs & Releases # 🧹 顺便顺便外包清理一下咱们整个大广场的流水线历史死尸和腐臭包
+        if: always() # 不管有没有因为网络断掉而失败，这个都要打扫一下。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash $GITHUB_WORKSPACE/scripts/clean_releases.sh
