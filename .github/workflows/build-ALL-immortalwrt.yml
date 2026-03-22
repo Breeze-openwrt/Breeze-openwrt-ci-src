@@ -199,8 +199,9 @@ jobs:
           echo "🌟 启动终极时空欺骗术：检测到 Toolchain 缓存，将其伪装成来自未来的全新产物..."
           if [ -d "openwrt/staging_dir" ]; then
             # 🛡️ 引入 sudo 暴力降维打击：强行破译那些被编译器锁死成“只读 (Read-Only 555)”的核心组件！
+            # 🛡️ 核心修复 (-h 参数)：专门对付 OpenWrt 里那堆乱指的“死链(断头软链接)”。强行只盖戳在链接本身，绝不去追踪那个已经被我们扔掉的源文件！
             # 附加 || true 终极法盾：无视极个别死脑筋软链接的报错，强行完成全盘时间戳篡改！
-            sudo find openwrt/staging_dir -exec touch {} + || true
+            sudo find openwrt/staging_dir -exec touch -h {} + || true
             echo "🎉 瞒天过海成功！系统已将旧工具箱认定为新鲜出厂状态！"
           else
             echo "⚠️ 尚未发掘出任何旧有制造机，本次将纯靠双手硬撸。"
