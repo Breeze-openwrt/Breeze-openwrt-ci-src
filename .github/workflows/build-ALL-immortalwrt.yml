@@ -43,6 +43,8 @@ on:
         required: true
         type: boolean
         default: true
+      # ⚠️ 注意：当本工作流由 `schedule` (定时计划任务) 自动触发运行时，
+      # 此选项将被强行判定为 `false`，跳过读取直接重新烧制全新纯净环境！
       use_ccache:
         description: "🧲 读取并复用 ccache 碎片？(选 false = 强制砸碎重配新缓存)"
         required: false
@@ -183,8 +185,9 @@ jobs:
 
 
       - name: Restore Ccache directory # 🧲 C++ 编译碎片金库：尝试拉取老本！
-        # 🛡️ 只有当用户勾选了复用缓存时，我们才去云端尝试下载。否则直接全新开始！
-        if: github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == ''
+        # 🛡️ 只有当用户勾选了复用缓存，【且当前绝非自动计划任务(schedule)】时，我们才去取云端干粮。
+        #    如果是按照日历设定的定时构建，它会强行跳过此步变成假环境(False)，从头开始砸碎重炼一炉100%纯净的新缓存！
+        if: github.event_name != 'schedule' && (github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == '')
         uses: actions/cache/restore@v5
         with:
           path: openwrt/.ccache
