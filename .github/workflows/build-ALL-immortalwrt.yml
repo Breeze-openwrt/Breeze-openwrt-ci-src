@@ -50,6 +50,11 @@ on:
         required: false
         type: boolean
         default: true
+      use_toolchain_cache:
+        description: "🔥 极客专享：复用庞大的 Toolchain 缓存？(可省近40分钟)"
+        required: false
+        type: boolean
+        default: true
 
 env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多常用的常量封印到这）
   REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
@@ -183,6 +188,24 @@ jobs:
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
+      - name: Restore Toolchain Cache # 🧰 尝试拉取巨无霸重工制造机！
+        if: github.event_name != 'schedule' && (github.event.inputs.use_toolchain_cache == 'true' || github.event.inputs.use_toolchain_cache == '')
+        uses: actions/cache/restore@v5
+        with:
+          path: openwrt/staging_dir
+          key: ${{ runner.os }}-openwrt-toolchain-latest
+          
+      - name: Time Magic - Fix Toolchain Timestamps # 🧙‍♂️ “时空扭曲”黑魔法核心阵法
+        if: github.event_name != 'schedule' && (github.event.inputs.use_toolchain_cache == 'true' || github.event.inputs.use_toolchain_cache == '')
+        run: |
+          echo "🌟 启动终极时空欺骗术：检测到 Toolchain 缓存，将其伪装成来自未来的全新产物..."
+          if [ -d "openwrt/staging_dir" ]; then
+            # 疯狂遍历深层每一块泥瓦，将其修改时间翻新为当下，比任何刚克隆下来的源代码都要新！
+            find openwrt/staging_dir -exec touch {} +
+            echo "🎉 瞒天过海成功！系统已将旧工具箱认定为新鲜出厂状态！"
+          else
+            echo "⚠️ 尚未发掘出任何旧有制造机，本次将纯靠双手硬撸。"
+          fi
 
       - name: Restore Ccache directory # 🧲 C++ 编译碎片金库：尝试拉取老本！
         # 🛡️ 只有当用户勾选了复用缓存，【且当前绝非自动计划任务(schedule)】时，我们才去取云端干粮。
@@ -336,6 +359,26 @@ jobs:
             echo "⚠️ 未找到编译后内网的 ccache 面板（可能首轮大循环未构建成功）。"
           fi
           echo "================================================="
+
+      - name: 🧹 Rebuild Toolchain Throne # 🧹 摧毁旧制造机残骸！
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 正在抹除云端所有存在的 Toolchain 缓存..."
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-toolchain-latest \
+            | jq -r '.actions_caches[].id' \
+            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
+            | jq -r '.actions_caches[] | select(.key | startswith("${{ runner.os }}-openwrt-toolchain-")) | .id' \
+            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
+
+      - name: Save Updated Toolchain # 💾 供奉新一代重工制造机！
+        if: success()
+        uses: actions/cache/save@v5
+        with:
+          path: openwrt/staging_dir
+          key: ${{ runner.os }}-openwrt-toolchain-latest
 
       - name: 🧹 Rebuild Ccache Throne # 🧹 为金库新王登基彻底清空王座！
         if: success()

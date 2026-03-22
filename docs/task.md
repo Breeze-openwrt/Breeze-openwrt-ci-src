@@ -1,12 +1,11 @@
-# 极客级流水线最终架构改造（任务追踪）
+# 🏁 任务清单：实装工具链 (Toolchain) 极限缓存方案
 
-- [x] 配置原子级的 ccache 脱水机制（独立 Restore 与 Save 循环更新最新 `latest` 缓存版）
-- [x] 将所有的摧毁动作和重建动作统一打包到执行末尾（If Success）压轴原子化处理（架构极致防爆缸）。
-- [x] 删除所有不安全的 `dl` 长名旧缓污染包
-- [x] 用底层原生 `sudo rm -rf` 将清理耗时从 5 分钟榨干到 3 秒
-- [x] 用 `nproc+1` 过载内核分配和 Fail-Fast 单核断崖止损法彻底重构主编译 `Make` 算法环
-- [x] 破解内核：引入 `eatmydata` 库拦截 `fsync` 禁用磁盘文件安全写入验证，实现 100% 无降速全内存虚拟态编译狂奔。
-- [x] 切除最后所有的 JS / Github 边缘第三方毒瘤外包，完成全源码 100% 第一方原生血统加持！
-- [x] 全面升级所有第一方官方 Action 钩子至 `v5`/`v6` 最新版本，并从根容器全局强置 Node.js 24 V8 引擎，无情抹绝旧版时代的 Deprecation Warning（弃用警告）。
-
-🎉 *全员脱机，彻底完美！*
+- [/] 1. 撰写实施计划 (Implementation Plan)，并向用户确认方案细节。
+- [x] 2. 修改 GitHub Actions 工作流 `build-ALL-immortalwrt.yml`。
+  - [x] 2.1 添加 `use_toolchain_cache` 到触发菜单选项。
+  - [x] 2.2 添加 **"Restore Toolchain Cache (尝试拉取工具链旧金库)"** 步骤。
+  - [x] 2.3 添加核心黑魔法：**"Time Magic - Fix Toolchain Timestamps (施展时空欺骗术强刷时间戳)"** 步骤。
+  - [x] 2.4 添加 **"Save Updated Toolchain Cache (保存新鲜出炉的工具链金库)"** 步骤。
+  - [x] 2.5 确立与 `ccache` 共存的清理策略。
+- [ ] 3. 提交代码并推送到 GitHub 远端触发测试。
+- [ ] 4. 编写总结报告 (Walkthrough) 并进行复盘沉淀。
