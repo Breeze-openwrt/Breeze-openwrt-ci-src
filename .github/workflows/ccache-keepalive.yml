@@ -1,4 +1,4 @@
-name: 💓 Ccache Immortality Heartbeat
+name: 💓 Double Cache Immortality Heartbeat
 
 on:
   schedule:
@@ -19,10 +19,16 @@ jobs:
         with:
           path: openwrt/.ccache
           key: ${{ runner.os }}-openwrt-ccache-latest
+
+      - name: 🧰 Touch & Renew Toolchain Lifespan (呼叫重工制造机，为时空魔法续命)
+        uses: actions/cache/restore@v5
+        with:
+          path: openwrt/staging_dir
+          key: ${{ runner.os }}-openwrt-toolchain-latest
           
       - name: 🎉 Success Verification
         run: |
-          echo "🎉 终极极客续命法术释放成功！"
-          echo "GitHub 服务器刚刚被这台幽灵机器光速访问了一次金库！"
-          echo "系统底层已经将你那几 GB 大小的 Ccache 的『最后存活生命线』强制重置为了：从此刻起往后再加 7 天！"
+          echo "🎉 终极极客双重续命法术释放成功！"
+          echo "GitHub 服务器刚刚被这台幽灵机器光速访问了 Ccache 和 Toolchain 两大超级金库！"
+          echo "系统底层已经将这两大核心建筑的『最后存活生命线』强制重置为了：从此刻起往后再加 7 天！"
           echo "真正的永生不死已达成！"
