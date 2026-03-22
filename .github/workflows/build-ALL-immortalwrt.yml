@@ -186,15 +186,37 @@ jobs:
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
+      - name: 📡 Size Radar (探针预警系统：狙击旧皇体重)
+        id: check_cache_size
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 正在向 GitHub 总机发送幽灵探测包，扒出云端 Toolchain 缓存的精确字节数..."
+          # 调用底层接口：拿取名为 -toolchain-latest 的包裹内部档案薄，精准抽出 'size_in_bytes' 
+          SIZE_BYTES=$(gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-toolchain-latest | jq -r '.actions_caches[0].size_in_bytes // 0')
+          
+          # 将字节换算为 MB 方便人看
+          SIZE_MB=$((SIZE_BYTES / 1024 / 1024))
+          echo "📊 当前云端 Toolchain 巨怪的具体体重为: ${SIZE_MB} MB"
+          
+          # 设定生死存亡的警戒红线阈值：2500 MB (约 2.44 GB)
+          if [ "$SIZE_MB" -gt 2500 ]; then
+            echo "🚨 警报！这只死循环的貔貅已经胖得走不动道了！今日触发强制熔断减肥机制！"
+            echo "SKIP_TOOLCHAIN=true" >> $GITHUB_ENV
+          else
+            echo "✅ 这套大钳子体态非常健康苗条，准许全面接入时空魔法！"
+            echo "SKIP_TOOLCHAIN=false" >> $GITHUB_ENV
+          fi
+
       - name: Restore Toolchain Cache # 🧰 尝试拉取巨无霸重工制造机！
-        if: github.event_name != 'schedule' && (github.event.inputs.use_toolchain_cache == 'true' || github.event.inputs.use_toolchain_cache == '')
+        if: github.event_name != 'schedule' && env.SKIP_TOOLCHAIN != 'true' && (github.event.inputs.use_toolchain_cache == 'true' || github.event.inputs.use_toolchain_cache == '')
         uses: actions/cache/restore@v5
         with:
           path: openwrt/staging_dir
           key: ${{ runner.os }}-openwrt-toolchain-latest
           
       - name: Time Magic - Fix Toolchain Timestamps # 🧙‍♂️ “时空扭曲”黑魔法核心阵法
-        if: github.event_name != 'schedule' && (github.event.inputs.use_toolchain_cache == 'true' || github.event.inputs.use_toolchain_cache == '')
+        if: github.event_name != 'schedule' && env.SKIP_TOOLCHAIN != 'true' && (github.event.inputs.use_toolchain_cache == 'true' || github.event.inputs.use_toolchain_cache == '')
         run: |
           echo "🌟 启动终极时空欺骗术：检测到 Toolchain 缓存，将其伪装成来自未来的全新产物..."
           if [ -d "openwrt/staging_dir" ]; then
