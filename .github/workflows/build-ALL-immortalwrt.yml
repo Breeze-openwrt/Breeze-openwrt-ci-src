@@ -229,6 +229,13 @@ jobs:
             echo "⚠️ 尚未发掘出任何旧有制造机，本次将纯靠双手硬撸。"
           fi
 
+      - name: Restore dl directory Cache # 📥 源码包护城金库：对抗国外断流，0秒秒杀下载环节！
+        if: github.event_name != 'schedule'
+        uses: actions/cache/restore@v5
+        with:
+          path: openwrt/dl
+          key: ${{ runner.os }}-openwrt-dl-latest
+
       - name: Restore Ccache directory # 🧲 C++ 编译碎片金库：尝试拉取老本！
         # 🛡️ 只有当用户勾选了复用缓存，【且当前绝非自动计划任务(schedule)】时，我们才去取云端干粮。
         #    如果是按照日历设定的定时构建，它会强行跳过此步变成假环境(False)，从头开始砸碎重炼一炉100%纯净的新缓存！
@@ -401,6 +408,26 @@ jobs:
         with:
           path: openwrt/staging_dir
           key: ${{ runner.os }}-openwrt-toolchain-latest
+
+      - name: 🧹 Rebuild dl Throne # 🧹 焚毁旧世代的下载源码包
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 正在抹除云端所有存在的 dl 源码包缓存..."
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-dl-latest \
+            | jq -r '.actions_caches[].id' \
+            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
+            | jq -r '.actions_caches[] | select(.key | startswith("${{ runner.os }}-openwrt-dl-")) | .id' \
+            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
+
+      - name: Save Updated dl directory # 💾 供奉全量源码依赖包！
+        if: success()
+        uses: actions/cache/save@v5
+        with:
+          path: openwrt/dl
+          key: ${{ runner.os }}-openwrt-dl-latest
 
       - name: 🧹 Rebuild Ccache Throne # 🧹 为金库新王登基彻底清空王座！
         if: success()
