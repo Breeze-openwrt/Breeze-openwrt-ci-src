@@ -218,7 +218,11 @@ jobs:
       - name: 📊 Check Toolchain Size (Restore)
         run: |
           echo "📦 [恢复后] Toolchain 实际物理体积："
-          du -shL ${{ env.WORK_DIR }}/openwrt/staging_dir 2>/dev/null || echo "⚠️ 目录尚未建立"
+          if [ -d "${{ env.WORK_DIR }}/openwrt/staging_dir" ]; then
+            du -sh ${{ env.WORK_DIR }}/openwrt/staging_dir || true
+          else
+            echo "⚠️ 目录尚未建立（首轮构建）"
+          fi
           
       - name: Time Magic - Fix Toolchain Timestamps # 🧙‍♂️ “时空扭曲”黑魔法核心阵法
         if: github.event_name != 'schedule' && env.SKIP_TOOLCHAIN != 'true' && (github.event.inputs.use_toolchain_cache == 'true' || github.event.inputs.use_toolchain_cache == '')
@@ -247,7 +251,11 @@ jobs:
       - name: 📊 Check Ccache Size (Restore)
         run: |
           echo "📦 [恢复后] Ccache 实际物理体积："
-          du -shL ${{ env.WORK_DIR }}/openwrt/.ccache 2>/dev/null || echo "⚠️ 目录尚未建立"
+          if [ -d "${{ env.WORK_DIR }}/openwrt/.ccache" ]; then
+            du -sh ${{ env.WORK_DIR }}/openwrt/.ccache || true
+          else
+            echo "⚠️ 目录尚未建立（首轮构建）"
+          fi
 
       # ================== 👇 核心高能区域：买菜洗菜环节 ==================
       - name: Prepare & Download (Yashe) # 🛒 检测：如果是点单选了 Yashe，那就按照它的菜单出击采购！
@@ -400,7 +408,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "📊 [保存前] Toolchain 最新物理体积："
-          du -shL ${{ env.WORK_DIR }}/openwrt/staging_dir || true
+          du -sh ${{ env.WORK_DIR }}/openwrt/staging_dir || true
           echo "🔍 正在抹除云端所有存在的 Toolchain 缓存..."
           gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-toolchain-latest \
             | jq -r '.actions_caches[].id' \
@@ -423,7 +431,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "📊 [保存前] Ccache 最新物理体积："
-          du -shL ${{ env.WORK_DIR }}/openwrt/.ccache || true
+          du -sh ${{ env.WORK_DIR }}/openwrt/.ccache || true
           echo "🔍 正在执行极简化缓存策略：抹除云端所有存在的 ccache 缓存，确保新版能100%成功覆盖写入..."
           
           # 利用原生命令删除固定名称的最新缓存（不管有没有，闭眼轰炸一次出空位）
