@@ -356,9 +356,13 @@ jobs:
           # 这里用通配符 `*` 可以把你之前成功编译的所有固件一锅端
           cp -r openwrt/bin/targets/*/*/*.* $GITHUB_WORKSPACE/firmware/ 2>/dev/null || true
           rm -rf $GITHUB_WORKSPACE/firmware/packages
-          echo "📊 最终生成的全量固件总体积："
-          du -sh ${{ env.FIRMWARE }}
+          # 🛡️ 先更新 FIRMWARE 环境变量，供后续步骤的 ${{ env.FIRMWARE }} 表达式正确解析
           echo "FIRMWARE=$GITHUB_WORKSPACE/firmware" >> $GITHUB_ENV
+          echo "📊 最终生成的全量固件总体积："
+          # 🐛 修复：原来使用 ${{ env.FIRMWARE }} (GitHub Actions 编译时表达式)，
+          #    在步骤启动前就被解析为初始值 /workdir/firmware，而非实际路径。
+          #    改用 shell 运行时变量 $GITHUB_WORKSPACE/firmware，确保路径正确。
+          du -sh $GITHUB_WORKSPACE/firmware
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Upload firmware directory # 📦 【内部发货】
