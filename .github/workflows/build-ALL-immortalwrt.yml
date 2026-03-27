@@ -133,29 +133,12 @@ jobs:
           # 校准电脑内时间
           sudo timedatectl set-timezone "$TZ"
           
-          # ==================== 💎 性能狂魔：异星寻宝系统（硬盘智能调度）====================
-          echo "🔍 正在进行全盘雷达扫描，寻找空间最大、性能最顶的非系统数据挂载盘..."
-          
-          # 算法说明：遍历系统中所有块存储 (/dev/*)
-          # 排除了 / (核心系统主盘)、loop (虚拟盘)、boot 等。
-          # 底线门槛：只要挂载点可用空间 > 20000MB (20GB，保证编译 OpenWrt 绝不因空间不足爆缸死机)。
-          # 从这些合格的独立硬盘里，选拔出剩余空间最大的一个把它设为唯一的编译中心！
-          BEST_DISK=$(df -mP | awk 'NR>1 && $1 ~ /^\/dev\// && $6 != "/" && $6 !~ /boot/ && $4 > 20000 {print $6, $4}' | sort -nr -k2 | awk 'NR==1 {print $1}')
-          
-          if [ -n "$BEST_DISK" ]; then
-            echo "🎉 雷达锁定！发掘出一块满足编译大容量需求的极品额外数据盘: ${BEST_DISK}，I/O 起飞！"
-            export BEST_WORKDIR="${BEST_DISK}/workdir"
-          else
-            echo "⚠️ 未探知到符合空间安全红线（>20GB）的额外数据副盘。启用最高性能的原生大容量主干系统盘代替..."
-            export BEST_WORKDIR="/workdir"
-          fi
-          
-          echo "🚀 最终裁定的核心编译军工厂坐标为：$BEST_WORKDIR"
-          sudo mkdir -p "$BEST_WORKDIR"
-          sudo chown $USER:$GROUPS "$BEST_WORKDIR"
-          
-          # 把这把黄金钥匙塞进全局广播频道，下发到后续所有的剧本和机器线上执行：
-          echo "WORK_DIR=$BEST_WORKDIR" >> $GITHUB_ENV
+          # ==================== 💎 直接启用系统主盘作为编译工作目录 ====================
+          # 📌 GitHub Actions 的 ubuntu-22.04 机器经过上面"强力拆迁"后，系统盘已有 50GB+ 可用空间，
+          #    完全满足 OpenWrt 编译需求，无需动态选盘，简洁可靠。
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
+          echo "WORK_DIR=/workdir" >> $GITHUB_ENV
 
       - name: Clone source code # 4️⃣：去把 OpenWrt 的源代码大库房全须全根拉过来
         # 👑 抛弃原来死板的编码设定，全自动跟随上一步智能雷达挑选出的最佳数据盘基地
