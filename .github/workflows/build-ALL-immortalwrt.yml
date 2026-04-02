@@ -83,6 +83,8 @@ jobs:
       - name: Checkout # 1️⃣：下发检出指令，去咱们的库房把上面的那些自定义脚本全拖到肉机里来
         # ✨ 追捕时代最前沿：摒弃不稳定且解析慢的 @main，直接使用稳定的纯净最新大版本 @v4
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # 💎 性能狂魔点睛之笔：全量拉取才能让清理逻辑看见所有历史 Tag
 
       - name: Free Disk Space (Ubuntu) # 2️⃣：强力拆迁队打扫战场 (性能狂魔原生秒杀版)
         # ✨ 性能狂魔终极优化：抛弃了原来那个极其臃肿、喜欢磨洋工耗时达 3~5 分钟的第三方扫地大妈 jlumbroso 插件。
@@ -458,10 +460,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 1. 直接从 Git 底层通过时间排序拉取所有标签（哪怕没有 Release 的孤儿 Tag 也无处遁形）
+          # 1. 直接从 Git 底层通过版本名/日期名排序拉取所有标签（隔离文件系统时间戳干扰）
           # 2. 我们将保护圈缩小到最近的 30 个“黄金版本”，对剩下的史前遗迹进行物理抹除。
           # 3. tail -n +31 意味着从第 31 个标签开始全部列入“由于过时将被处决”名单。
-          tags=$(git tag --sort=-creatordate | tail -n +31)
+          tags=$(git tag --sort=-v:refname | tail -n +31)
           
           if [ -n "$tags" ]; then
             for tag in $tags; do
