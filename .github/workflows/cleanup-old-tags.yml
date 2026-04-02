@@ -1,0 +1,41 @@
+name: 🧹 Manual Cleanup (Old Tags & Releases)
+
+on:
+  workflow_dispatch: # 🖱️ 用户手动触发点单
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          # 💎 性能狂魔点睛之笔：必须全量拉取 (0)，不然本地 Git 压根看不见云端的那些老旧标签历史！
+          fetch-depth: 0 
+
+      - name: 🚀 Execute Full Cleanup (30+ 斩首行动)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "📊 正在从本地拉取全量标签映射图..."
+          
+          # ✨ 性能狂魔排序术：--sort=-v:refname 
+          # 专门针对版本号（1.2.3）或日期（2026.03.22）格式的字符串进行精准倒序。
+          # 它不依赖文件修改时间，即便克隆后时间戳乱了，字符串比较也绝不会出错。
+          tags=$(git tag --sort=-v:refname | tail -n +31)
+          
+          if [ -n "$tags" ]; then
+            echo "发现以下超期服役的标签，准备强制抹除："
+            echo "$tags"
+            
+            for tag in $tags; do
+              echo "🗑️ 正在物理抹除: $tag"
+              # 1. 优先尝试撕掉网页上的 Release 及其关联 Tag (GitHub API 级删除)
+              gh release delete "$tag" --cleanup-tag -y || true
+              # 2. 补刀：防止某些失败过后的“孤儿 Tag”没挂 Release 导致清理失败，直接执行 Git 协议级彻底删除
+              git push origin --delete "$tag" || true
+            done
+            echo "🎉 [扫地机器人] 任务圆满成功！仓库已重新回归 30 个黄金版本状态。"
+          else
+            echo "✅ 经扫描，您的仓库目前体态匀称（≤30个），无需开启清理程序。"
+          fi
