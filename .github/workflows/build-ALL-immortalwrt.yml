@@ -157,6 +157,40 @@ jobs:
           sudo chown $USER:$GROUPS /workdir
           echo "WORK_DIR=/workdir" >> $GITHUB_ENV
 
+      - name: 🔧 Install LLVM Clang 18 (修复 gn 的 C++23 编译失败) # 🩹 关键修复！
+        # 🩹【史诗级大坑修复3】gn 包的 build/gen.py 在 Linux 下默认使用 PATH 里的 `clang++`，
+        #    并且【硬编码】了 `-std=c++23`（gen.py 第 528 行，无任何版本探测）。
+        #    而 ubuntu-22.04 自带的 clang 只有 14（只认识 `c++2b`，不认识 `c++23`），
+        #    于是 feeds/packages/devel/gn 这个 host 工具包直接编译失败：
+        #        error: invalid value 'c++23' in '-std=c++23'
+        #    → make world 退出码 2 → 整轮固件编译全盘崩塌。
+        #    注：OpenWrt 官方 packages 的 gn Makefile 覆盖了 Host/Configure，
+        #        导致 include/host-build.mk 里的 `CXX=$(HOSTCXX)` 压根没传给 gen.py，
+        #        所以 gen.py 才会退回到 PATH 里的系统 clang。
+        # 🛡️ 治本方案：安装 LLVM 官方仓库的 Clang 18（>=17 才认 -std=c++23），
+        #    并用 update-alternatives 把 /usr/bin/clang++ 切到它。
+        #    影响面极小：OpenWrt 的 host 编译默认走 g++，只有 gn 这类自建 Makefile 的
+        #    包才会直接调用 PATH 里的 clang++。
+        continue-on-error: true # 🛡️ 万一 LLVM 源抽风，交给下面的 C++2b 兼容补丁兜底，别让整轮编译陪葬
+        run: |
+          echo "🩹 正在为 host 工具链安装 LLVM 官方 Clang 18（gn 需要 C++23 支持）..."
+          sudo -E apt-get -qq install -y --no-install-recommends wget gnupg ca-certificates
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo -E apt-get -qq update
+          if sudo -E apt-get -qq install -y --no-install-recommends clang-18; then
+            sudo update-alternatives --install /usr/bin/clang clang-18 100
+            sudo update-alternatives --install /usr/bin/clang++ clang++-18 100
+            sudo update-alternatives --set clang /usr/bin/clang-18
+            sudo update-alternatives --set clang++ /usr/bin/clang++-18
+            echo "✅ 当前 clang 版本："
+            clang++ --version
+            echo "🧪 自检：确认 -std=c++23 已被支持（这正是 gn 的硬性要求）"
+            echo 'int main(){return 0;}' | clang++ -x c++ -std=c++23 - -o /dev/null && echo "✅ -std=c++23 OK"
+          else
+            echo "⚠️ Clang 18 安装失败！将改用下方 gn 的 C++2b 兼容补丁兜底（同一标准草案，功能等价）。"
+          fi
+
       - name: Clone source code # 4️⃣：去把 OpenWrt 的源代码大库房全须全根拉过来
         # 👑 抛弃原来死板的编码设定，全自动跟随上一步智能雷达挑选出的最佳数据盘基地
         working-directory: ${{ env.WORK_DIR }}
@@ -178,6 +212,23 @@ jobs:
 
       - name: Install feeds # 7️⃣：把我们订阅的所有小插件的目录都安装落户过来
         run: cd openwrt && ./scripts/feeds install -a
+
+      - name: 🔧 Patch gn (C++23 → C++2b 兼容补丁) # 🩹 兜底防线：防止 LLVM 源抽风导致编译再次翻车
+        # 🩹【史诗级大坑修复3·兜底】gn 的 build/gen.py 硬编码了 `-std=c++23`，
+        #    而老版本 clang（<17）只认识 `-std=c++2b`。两者指向的是同一份 C++23 标准草案，
+        #    功能完全等价，因此这里直接把 gen.py 里的拼写降级，绕开编译器版本依赖。
+        #    正常情况下上一步的 Clang 18 已经接管，这个补丁只是最后一道保险丝。
+        run: |
+          cd openwrt/feeds/packages/devel/gn
+          cp Makefile Makefile.orig
+          # 🧬 在 Host/Configure 调用 gen.py 之前，先把 gen.py 里的 c++23 改写为 c++2b
+          sed -i 's|^\t$(PYTHON) $(HOST_BUILD_DIR)/build/gen.py|\tsed -i "s/-std=c++23/-std=c++2b/g" $(HOST_BUILD_DIR)/build/gen.py\n\t$(PYTHON) $(HOST_BUILD_DIR)/build/gen.py|' Makefile
+          if grep -q 'c++2b' Makefile; then
+            echo "✅ gn 兼容补丁已生效：C++23 → C++2b（同一标准草案，等价安全）"
+          else
+            echo "⚠️ 补丁未生效（上游 Makefile 格式可能已变更），将完全依赖 Clang 18 兜底"
+            mv Makefile.orig Makefile
+          fi
 
       - name: Load custom configuration # 8️⃣：上自己的“微调小特权”
         run: |
