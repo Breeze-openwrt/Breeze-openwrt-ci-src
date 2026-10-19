@@ -191,19 +191,26 @@ jobs:
             #    链接路径 / alternatives 组名 / 真实目标文件 / 优先级，缺一不可。
             #    程序自己给出的 usage 就是最权威的依据：
             #      "update-alternatives: --install needs <link> <name> <path> <priority>"
-            sudo update-alternatives --install /usr/bin/clang clang-18 /usr/bin/clang-18 100
-            sudo update-alternatives --install /usr/bin/clang++ clang++-18 /usr/bin/clang++-18 100
-            sudo update-alternatives --set clang /usr/bin/clang-18
-            sudo update-alternatives --set clang++ /usr/bin/clang++-18
+            # 🛡️【主路径·最可靠】直接把 /usr/bin/clang++ 指向 clang++-18。
+            #    为什么不能只靠「export PATH 前置 /usr/lib/llvm-18/bin」？
+            #    因为 OpenWrt 编译时的 PATH 是它自己硬编码赋值的（include/toplevel.mk）：
+            #      export PATH := $(CURDIR)/staging_dir/host/bin:...:/usr/bin:/bin:...
+            #    那是覆盖赋值、不继承外部 PATH，workflow 里 export 的目录到编译阶段就没了。
+            #    唯一能让 gn（gen.py 默认取 PATH 里的 clang++）用上 clang-18 的办法，
+            #    就是改 /usr/bin/clang++ 这个符号链接本身。
+            sudo rm -f /usr/bin/clang /usr/bin/clang++
+            sudo ln -s /usr/bin/clang-18 /usr/bin/clang
+            sudo ln -s /usr/bin/clang++-18 /usr/bin/clang++
+            echo "✅ 已将 /usr/bin/clang++ 指向 clang++-18"
+            # 🛡️【附带】同步更新 alternatives。
+            #    注意组名必须沿用系统已有的 clang / clang++，另起组名会报
+            #    "alternative link /usr/bin/clang is already managed by clang"。
+            #    失败也不阻断主路径。
+            sudo update-alternatives --install /usr/bin/clang   clang   /usr/bin/clang-18   100 || true
+            sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100 || true
             echo "✅ 补装完成"
           else
             echo "⚠️ LLVM 源补装失败"
-          fi
-          # 🛡️ 兜底：完全不依赖 update-alternatives 是否成功——
-          #    直接把 LLVM 官方二进制目录前置到 PATH（apt.llvm.org 的标准布局）。
-          if [ -x /usr/lib/llvm-18/bin/clang++ ]; then
-            echo "/usr/lib/llvm-18/bin" >> $GITHUB_PATH
-            echo "✅ 已将 /usr/lib/llvm-18/bin 前置到 PATH（不依赖 alternatives）"
           fi
           echo "🔍 clang++ 实际指向 : $(readlink -f "$(command -v clang++)" 2>/dev/null)"
           echo "🔍 clang++ 版本     : $(clang++ --version 2>/dev/null | head -1)"
