@@ -9,7 +9,7 @@ on:
 
 jobs:
   anti-sleep:
-    runs-on: ubuntu-24.04 （22.04 runner 2027-04-17 停止支持）
+    runs-on: ubuntu-26.04 （主力环境） （22.04 runner 2027-04-17 停止支持）
     env:
       # 🚀 【Node.js 24 引擎开关】：剿灭过时的 node 20 警告。
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

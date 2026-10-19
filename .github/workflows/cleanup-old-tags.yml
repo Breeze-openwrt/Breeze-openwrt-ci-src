@@ -5,7 +5,7 @@ on:
 
 jobs:
   cleanup:
-    runs-on: ubuntu-24.04 （钉死版本，避免 ubuntu-latest 在迁移窗口被动切到 26.04）
+    runs-on: ubuntu-26.04 # 🖥️ 钉死具体版本，不用 ubuntu-latest（它正在向 26.04 迁移，会导致行为不可控）
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4

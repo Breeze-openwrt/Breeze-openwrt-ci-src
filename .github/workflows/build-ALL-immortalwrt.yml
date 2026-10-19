@@ -56,6 +56,14 @@ on:
         required: false
         type: boolean
         default: true
+      runner_os:
+        description: "🖥️ 选择 runner 基础环境（26.04 为主力，24.04 为备用）"
+        required: false
+        type: choice
+        default: ubuntu-26.04
+        options:
+          - ubuntu-26.04
+          - ubuntu-24.04
 
 env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多常用的常量封印到这）
   REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
@@ -73,7 +81,9 @@ env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多�
 
 jobs:
   build:
-    runs-on: ubuntu-24.04 # 🖥️ 云端干活肉鸡。已从 ubuntu-22.04 迁出：22.04 runner 镜像2026-09-17 起进入弃用期、2027-04-17 将彻底停止支持；24.04 自带 clang 18（原生支持 C++23）。
+    # 🖥️ runner 由 workflow_dispatch 的 runner_os 决定；定时任务(schedule)无该输入，
+    #    自动回落到默认的 ubuntu-26.04。24.04 保留为备用方案。
+    runs-on: ${{ inputs.runner_os || 'ubuntu-26.04' }}
     env: # 🏢 Job 层级环境变量：这就像是在具体工位的桌子上贴了层最高指令
       # 🗂️ 全局动态变量占位符（消除 IDE 的未声明警告，后续运行中会被脚本塞入真实数据）
       WORK_DIR: /workdir
@@ -123,29 +133,31 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive # 🤖【机器人模式光环】: 有任何弹窗问“是/否”一律默认执行免卡死模式！
         run: |
-          # 🛡️【史诗级大坑修复5】apt 依赖已按 noble(24.04) 源校正（用 24.04 的 Packages 索引逐包实测）：
-          #    删 python2.7 / libncurses5-dev / libncursesw5-dev / libz-dev / ncurses-dev（24.04 已无）
-          #    改 gnutls-dev→libgnutls28-dev、mkisofs→genisoimage
+          # 🛡️【史诗级大坑修复5】apt 依赖已取 noble(24.04) 与 resolute(26.04) 两个源的【交集】，
+          #    并用两套 Packages 索引逐包实测通过（109+3 个包，两边均可用）。
           #    任何一个包在源里缺失，apt-get install 整条命令就会失败，job 第一分钟就挂。
+          #    关键改动：删 python2.7 / libncurses5-dev / libncursesw5-dev / libz-dev /
+          #    ncurses-dev / p7zip / p7zip-full / libpcre3-dev，
+          #    改 gnutls-dev→libgnutls28-dev、mkisofs→genisoimage、p7zip→7zip。
           # ✨ 性能狂魔绝杀：合并 60 余行垃圾冗余重复的安装指令，解放服务器 I/O！
           # GitHub Action 的新机器其实已经很干净了，不需要上来先全盘跑好几圈升级（纯浪费生命）。
           # 🛡️ 终极屏蔽：强制切断所有 --no-install-recommends (不下载配套教程和无用推流模块，只装干货核心)，再减几分钟体积！
           sudo -E apt-get -qq update
           sudo -E apt-get -qq install -y --no-install-recommends \
-            eatmydata ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-            bzip2 cargo ccache cdrkit-doc clang cmake cpio curl dejagnu device-tree-compiler \
-            dos2unix ecj expect fastjar flex g++ g++-multilib gawk gcc gcc-multilib gettext \
-            ghc git golang libgnutls28-dev gperf haveged help2man intltool lib32gcc-s1 \
-            libc6-dev-i386 libelf-dev libfido2-dev libffi-dev libfuse-dev libglib2.0-dev libgmp-dev \
-            libgmp3-dev libltdl-dev libltdl7 libmpc-dev libmpfr-dev libncurses-dev libpcre2-dev \
-            libpcre3-dev libpython3-dev libreadline-dev libssl-dev libtext-unidecode-perl libtool \
-            libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl \
-            libyaml-dev lld llvm lrzsz luajit luarocks make genisoimage msmtp nano ninja-build \
-            openjdk-11-jdk p7zip p7zip-full patch pkgconf pybind11-dev python3 python3-dev \
-            python3-docutils python3-pip python3-ply python3-pyelftools python3-setuptools \
-            qemu-utils re2c rsync \
-            ruby-dev rustc scons sgml-base squashfs-tools subversion swig tcl-expect tcl8.6 \
-            tex-common texinfo uglifyjs unzip upx-ucl vim wget wodim xmlto xxd zlib1g-dev zstd
+            eatmydata ack antlr3 asciidoc autoconf automake autopoint binutils bison \
+            build-essential bzip2 cargo ccache cdrkit-doc clang cmake cpio curl dejagnu \
+            device-tree-compiler dos2unix ecj expect fastjar flex g++ g++-multilib gawk gcc \
+            gcc-multilib gettext ghc git golang libgnutls28-dev gperf haveged help2man intltool \
+            lib32gcc-s1 libc6-dev-i386 libelf-dev libfido2-dev libffi-dev libfuse-dev \
+            libglib2.0-dev libgmp-dev libgmp3-dev libltdl-dev libltdl7 libmpc-dev libmpfr-dev \
+            libncurses-dev libpcre2-dev libpython3-dev libreadline-dev libssl-dev \
+            libtext-unidecode-perl libtool libxml-libxml-perl libxml-namespacesupport-perl \
+            libxml-sax-base-perl libyaml-dev lld llvm lrzsz luajit luarocks lsb-release make \
+            genisoimage msmtp nano ninja-build openjdk-11-jdk 7zip patch pkgconf pybind11-dev \
+            python3 python3-dev python3-docutils python3-pip python3-ply python3-pyelftools \
+            python3-setuptools qemu-utils re2c rsync ruby-dev rustc scons sgml-base \
+            squashfs-tools subversion swig tcl-expect tcl8.6 tex-common texinfo uglifyjs unzip \
+            upx-ucl vim wget wodim xmlto xxd zlib1g-dev zstd
           
           # 清理一下安装产生的无用骨架碎片
           sudo -E apt-get -qq autoremove --purge
@@ -234,7 +246,7 @@ jobs:
         run: |
           echo "🔍 正在向 GitHub 总机发送幽灵探测包，扒出云端 Toolchain 缓存的精确字节数..."
           # 调用底层接口：拿取名为 -toolchain-latest 的包裹内部档案薄，精准抽出 'size_in_bytes' 
-          SIZE_BYTES=$(gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-toolchain-latest | jq -r '.actions_caches[0].size_in_bytes // 0')
+          SIZE_BYTES=$(gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-${{ inputs.runner_os || 'ubuntu-26.04' }}-openwrt-toolchain-latest | jq -r '.actions_caches[0].size_in_bytes // 0')
           
           # 将字节换算为 MB 方便人看
           SIZE_MB=$((SIZE_BYTES / 1024 / 1024))
@@ -250,11 +262,21 @@ jobs:
           fi
 
       - name: Restore Toolchain Cache # 🧰 尝试拉取巨无霸重工制造机！
+        # 🛡️【史诗级大坑修复7】toolchain 缓存必须【按 runner 版本隔离】！
+        #    staging_dir/host/bin/ 下大量是指向系统路径的符号链接
+        #    （例如 python3 -> /usr/bin/python3.10）。跨 Ubuntu 大版本复用缓存时，
+        #    这些链接会全部指向不存在的路径，表现为
+        #      bash: /workdir/openwrt/staging_dir/host/bin/python3: No such file or directory
+        #      ERROR: package/system/apk [host] failed to build.
+        #      ERROR: package/feeds/packages/gn [host] failed to build.
+        #    「Time Magic - Fix Toolchain Timestamps」只 touch 时间戳、不会修复链接。
+        #    所以 key 必须带上 runner 版本，各版本各自维护一份干净缓存。
+        #    ccache 则继续共用（内容寻址，跨版本绝对安全）。
         if: github.event_name != 'schedule' && env.SKIP_TOOLCHAIN != 'true' && (github.event.inputs.use_toolchain_cache == 'true' || github.event.inputs.use_toolchain_cache == '')
         uses: actions/cache/restore@v5
         with:
           path: openwrt/staging_dir
-          key: ${{ runner.os }}-openwrt-toolchain-latest
+          key: ${{ runner.os }}-${{ inputs.runner_os || 'ubuntu-26.04' }}-openwrt-toolchain-latest
 
       - name: 📊 Check Toolchain Size (Restore)
         run: |
@@ -460,7 +482,7 @@ jobs:
           echo "📊 [保存前] Toolchain 最新物理体积："
           du -sh ${{ env.WORK_DIR }}/openwrt/staging_dir || true
           echo "🔍 正在抹除云端所有存在的 Toolchain 缓存..."
-          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-toolchain-latest \
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-${{ inputs.runner_os || 'ubuntu-26.04' }}-openwrt-toolchain-latest \
             | jq -r '.actions_caches[].id' \
             | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
           gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
@@ -472,7 +494,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: openwrt/staging_dir
-          key: ${{ runner.os }}-openwrt-toolchain-latest
+          key: ${{ runner.os }}-${{ inputs.runner_os || 'ubuntu-26.04' }}-openwrt-toolchain-latest
 
 
       - name: 🧹 Rebuild Ccache Throne # 🧹 为金库新王登基彻底清空王座！
