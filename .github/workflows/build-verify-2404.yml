@@ -8,6 +8,32 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 # -----------------------------------------------------------------------------
+# 🧪【独立环境验证】ubuntu-VER
+#
+#    【为什么单独成文件而不是用 matrix】：
+#      matrix 展开的两个 job 在实测中长时间停在「等待 runner 分配」状态（已生成 job ID
+#      但没有任何步骤记录），无法区分究竟是排队拥塞、还是某个标签的 runner 池容量不足。
+#      拆成两个独立 workflow 后：① 两者可各自独立触发 / 独立重跑 / 互不牵连；
+#      ② 哪一边起不来一目了然，能立刻判断是「平台排队」还是「该版本标签不可用」。
+#
+#    【验证目标】：确认在 ubuntu-VER 上能否稳定编译出 Yashe 固件。
+#      这是为把主工作流从已弃用的 ubuntu-22.04 迁出去做实测背书。
+#
+#    【已知差异】apt 依赖已同时适配 noble(24.04) 与 resolute(26.04)：
+#      删 python2.7 / libncurses5-dev / libncursesw5-dev / libpcre3-dev / p7zip-full /
+#         libz-dev / p7zip，
+#      改 gnutls-dev→libgnutls28-dev、mkisofs→genisoimage、p7zip→7zip。
+# -----------------------------------------------------------------------------
+#
+# Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+# https://github.com/P3TERX/Actions-OpenWrt
+# Description: Build OpenWrt using GitHub Actions
+#
+# -----------------------------------------------------------------------------
 # 🧪【并行环境验证矩阵】ubuntu-24.04 × ubuntu-26.04
 #
 #    【目的】：一次性并行验证「换一个 GitHub Actions runner 基础环境」到底能不能编出固件，
@@ -20,9 +46,9 @@
 #      4. ubuntu-24.04 / 26.04 镜像预装的 clang 分别是 18 / 21，原生支持 C++23。
 #
 #    【设计要点】：
-#      • strategy.fail-fast: false —— 某一个环境挂了不影响另一个继续跑，
-#        这样一次 run 就能同时拿到「24.04 能编 / 26.04 不能编」这种对比结论。
-#      • 缓存 key 带上 matrix.os —— 24.04 与 26.04 的 toolchain/ccache 必须物理隔离，
+#      • 独立成文件（而非 matrix 展开）—— 两者可各自独立触发 / 独立重跑 / 互不牵连，
+#        哪一边起不来一目了然，能立刻区分「平台排队」与「该版本标签不可用」。
+#      • 缓存 key 带上 Ubuntu 版本 —— 24.04 与 26.04 的 toolchain/ccache 必须物理隔离，
 #        否则两个 job 会争抢同一个 cache key（后写入的会触发 "Unable to reserve cache" 警告）。
 #      • apt 依赖已同时适配 noble(24.04) 与 resolute(26.04) 两个源：
 #        删 python2.7 / libncurses5-dev / libncursesw5-dev / libpcre3-dev / p7zip-full，
@@ -30,7 +56,7 @@
 #      • 保留 gn 的 C++23→C++2b 兜底补丁（同一份 C++23 标准草案，语义等价）。
 # -----------------------------------------------------------------------------
 
-name: 🧪 Verify Build Matrix (24.04 × 26.04) # 🏷️ 环境兼容性验证专用
+name: 🧪 Verify ubuntu-24.04 # 🏷️ 单环境兼容性验证
 
 on:
   workflow_dispatch: # 🖱️ 手动触发
@@ -60,13 +86,13 @@ env: # 🌍 全局环境变量
 
 jobs:
   build:
-    # 🧪 两个环境同时跑，互不干扰
-    strategy:
-      fail-fast: false # ⚠️ 关键：绝不能因为一个失败就把另一个也砍掉
-      matrix:
-        os: [ubuntu-24.04, ubuntu-26.04]
+    # 🛡️ 同一个 cache key 同时被两个 job 写入会触发 "Unable to reserve cache"，
+    #    用 concurrency 串行化同名缓存的写入。
+    concurrency:
+      group: verify-ubuntu-24.04-{{ github.repository }}
+      cancel-in-progress: false
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
 
     env:
       WORK_DIR: /workdir
@@ -84,7 +110,7 @@ jobs:
           echo "================================================="
           echo "🧪 验证矩阵环境自检报告"
           echo "================================================="
-          echo "🏷️ 目标 runner : ${{ matrix.os }}"
+          echo "🏷️ 目标 runner : ubuntu-24.04"
           echo "🖥️ 实际系统   : $(lsb_release -ds 2>/dev/null || cat /etc/os-release | head -1)"
           echo "🧿 内核版本   : $(uname -r)"
           echo "🧮 CPU 核心数 : $(nproc)"
@@ -207,9 +233,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SIZE_BYTES=$(gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-${{ matrix.os }}-openwrt-toolchain-latest | jq -r '.actions_caches[0].size_in_bytes // 0')
+          SIZE_BYTES=$(gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-ubuntu-24.04-openwrt-toolchain-latest | jq -r '.actions_caches[0].size_in_bytes // 0')
           SIZE_MB=$((SIZE_BYTES / 1024 / 1024))
-          echo "📊 当前 [${{ matrix.os }}] Toolchain 巨怪的具体体重为: ${SIZE_MB} MB"
+          echo "📊 当前 [ubuntu-24.04] Toolchain 巨怪的具体体重为: ${SIZE_MB} MB"
           if [ "$SIZE_MB" -gt 2500 ]; then
             echo "🚨 触发强制熔断减肥机制！"
             echo "SKIP_TOOLCHAIN=true" >> $GITHUB_ENV
@@ -223,8 +249,8 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: openwrt/staging_dir
-          # 🛡️ key 必须带 matrix.os —— 24.04 与 26.04 的工具链物理隔离，互不污染
-          key: ${{ runner.os }}-${{ matrix.os }}-openwrt-toolchain-latest
+          # 🛡️ key 必须带上 Ubuntu 版本 —— 与其它环境的工具链物理隔离，互不污染
+          key: ${{ runner.os }}-ubuntu-24.04-openwrt-toolchain-latest
 
       - name: 📊 Check Toolchain Size (Restore)
         run: |
@@ -249,7 +275,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: openwrt/.ccache
-          key: ${{ runner.os }}-${{ matrix.os }}-openwrt-ccache-latest
+          key: ${{ runner.os }}-ubuntu-24.04-openwrt-ccache-latest
 
       - name: 📊 Check Ccache Size (Restore)
         run: |
@@ -321,7 +347,7 @@ jobs:
         if: (steps.compile_yashe.outputs.status == 'success' || steps.compile_taiyi.outputs.status == 'success') && env.UPLOAD_BIN_DIR == 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: OpenWrt_bin-${{ matrix.os }}${{ env.FILE_DATE }}
+          name: OpenWrt_bin-ubuntu-24.04${{ env.FILE_DATE }}
           path: openwrt/bin
 
       - name: Organize ALL output files
@@ -340,7 +366,7 @@ jobs:
         if: steps.organize.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: OpenWrt_firmware-${{ matrix.os }}${{ env.FILE_DATE }}
+          name: OpenWrt_firmware-ubuntu-24.04${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}.tar.gz
 
       - name: Show Ccache Statistics
@@ -356,14 +382,14 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: openwrt/staging_dir
-          key: ${{ runner.os }}-${{ matrix.os }}-openwrt-toolchain-latest
+          key: ${{ runner.os }}-ubuntu-24.04-openwrt-toolchain-latest
 
       - name: Save Updated Ccache
         if: always() && steps.compile_yashe.outputs.status == 'success'
         uses: actions/cache/save@v5
         with:
           path: openwrt/.ccache
-          key: ${{ runner.os }}-${{ matrix.os }}-openwrt-ccache-latest
+          key: ${{ runner.os }}-ubuntu-24.04-openwrt-ccache-latest
 
       - name: Post Checkout
         if: always()
