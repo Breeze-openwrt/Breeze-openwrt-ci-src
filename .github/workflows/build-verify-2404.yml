@@ -202,6 +202,21 @@ jobs:
             sudo ln -s /usr/bin/clang-18 /usr/bin/clang
             sudo ln -s /usr/bin/clang++-18 /usr/bin/clang++
             echo "✅ 已将 /usr/bin/clang++ 指向 clang++-18"
+            # 🛡️【关键·补漏】GitHub runner 镜像的 PATH 里 /usr/lib/llvm-14/bin 排在
+            #    /usr/bin 之前，`command -v clang++` 会优先命中那里的 clang-14
+            #    （实测 readlink -f 得到 /usr/lib/llvm-14/bin/clang）。
+            #    OpenWrt 编译时 PATH 继承自外部（include/toplevel.mk 里
+            #    `export PATH:=$(path)` 是清洗后重组，不是硬编码列表），
+            #    所以这个优先级会一路带进编译阶段。
+            #    因此把 /usr/lib/llvm-*/bin 下所有 clang++ 一并重定向到 clang++-18，
+            #    保证任何 PATH 顺序下解析到的都是 18。
+            #    只替换 clang++ 这个符号链接，不动 clang 本体，避免破坏包完整性。
+            for d in /usr/lib/llvm-*/bin; do
+              if [ -e "$d/clang++" ]; then
+                sudo ln -sf /usr/bin/clang++-18 "$d/clang++"
+                echo "✅ 已重定向 $d/clang++ -> clang++-18"
+              fi
+            done
             # 🛡️【附带】同步更新 alternatives。
             #    注意组名必须沿用系统已有的 clang / clang++，另起组名会报
             #    "alternative link /usr/bin/clang is already managed by clang"。
