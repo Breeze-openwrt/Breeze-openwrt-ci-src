@@ -17,9 +17,9 @@
 #      ② 哪一边起不来一目了然，能立刻判断是「平台排队」还是「该版本标签不可用」。
 #
 #    【验证目标】：确认在 ubuntu-VER 上能否稳定编译出 Yashe 固件。
-#      这是为把主工作流从已弃用的 ubuntu-22.04 迁出去做实测背书。
+#      这是为主工作流统一到 ubuntu-26.04 做实测背书。
 #
-#    【已知差异】apt 依赖已同时适配 noble(24.04) 与 resolute(26.04)：
+#    【已知差异】apt 依赖取 noble(24.04) 与 resolute(26.04) 两源的交集：
 #      删 python2.7 / libncurses5-dev / libncursesw5-dev / libpcre3-dev / p7zip-full /
 #         libz-dev / p7zip，
 #      改 gnutls-dev→libgnutls28-dev、mkisofs→genisoimage、p7zip→7zip。
@@ -37,20 +37,18 @@
 # 🧪【主力环境验证】ubuntu-26.04
 #
 #    【目的】：一次性并行验证「换一个 GitHub Actions runner 基础环境」到底能不能编出固件，
-#    主工作流已统一到 ubuntu-26.04（24.04 保留为主工作流 runner_os 下拉框里的备用选项，
-#    不再单独维护验证文件——需要时用主工作流 runner_os=ubuntu-24.04 跑一遍即可，
-#    它的能力是本验证文件的超集：Yashe + Taiyi 双固件 + 发布 release）。
+#    主工作流已统一到 ubuntu-26.04，本文件是它的轻量对照版本：
+#    只编单固件、不发布 release，用于快速回归与产出对比数据。
 #
-#    【为什么不用 ubuntu-22.04】：
-#      1. Ubuntu 22.04 runner 镜像已于 2026-09-17 进入弃用期，2027-04-17 将彻底停止支持。
-#      2. ubuntu-latest 标签正在向 Ubuntu 26.04 迁移（2026-10-19 ~ 2026-11-19 窗口期）。
-#      3. ubuntu-22.04 自带 clang 14，不认识 gn 硬编码的 `-std=c++23`（需 clang >= 17）。
-#      4. ubuntu-26.04 镜像预装的 clang 21 原生支持 C++23（24.04 的 clang 18 同样支持）。
+#    【为什么钉死 ubuntu-26.04】：
+#      1. ubuntu-latest 标签正在向 Ubuntu 26.04 迁移（2026-10-19 ~ 2026-11-19 窗口期），
+#         用 latest 会让 runner 被动切换、行为不可控，所以一律写死具体版本。
+#      2. ubuntu-26.04 镜像预装 clang 21，原生支持 gn 硬编码的 `-std=c++23`（需 clang >= 17）。
 #
 #    【设计要点】：
 #      • 独立成文件（而非 matrix 展开）—— 两者可各自独立触发 / 独立重跑 / 互不牵连，
 #        哪一边起不来一目了然，能立刻区分「平台排队」与「该版本标签不可用」。
-#      • 缓存 key 带上 Ubuntu 版本 —— 24.04 与 26.04 的 toolchain/ccache 必须物理隔离，
+#      • 缓存 key 带上 Ubuntu 版本 —— toolchain/ccache 按版本物理隔离，
 #        否则两个 job 会争抢同一个 cache key（后写入的会触发 "Unable to reserve cache" 警告）。
 #      • apt 依赖已同时适配 noble(24.04) 与 resolute(26.04) 两个源：
 #        删 python2.7 / libncurses5-dev / libncursesw5-dev / libpcre3-dev / p7zip-full，
@@ -138,7 +136,8 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # 🛡️【史诗级大坑修复4】apt 依赖必须同时兼容 noble(24.04) 与 resolute(26.04)。
+          # 🛡️【史诗级大坑修复4】apt 依赖取 noble(24.04) 与 resolute(26.04) 两源的交集，
+          #    保证任一版本都不会缺包。
           #    26.04 移除了 python2.7 / libncurses5-dev / libncursesw5-dev / libpcre3-dev / p7zip-full，
           #    且把 gnutls-dev 改名为 libgnutls28-dev、mkisofs 改名为 genisoimage、p7zip 改名为 7zip。
           #    若不统一处理，apt-get install 会整条失败，job 会在第一分钟就挂掉。
@@ -165,9 +164,9 @@ jobs:
           echo "WORK_DIR=/workdir" >> $GITHUB_ENV
 
       - name: 🔧 Verify Clang supports C++23 (gn 的硬性要求)
-        # 🛡️【史诗级大坑修复6】ubuntu-24.04 预装 clang 18、ubuntu-26.04 预装 clang 21，
-        #    都原生支持 -std=c++23，根本不需要再装任何 LLVM 官方包。
-        #    此前为迁就 ubuntu-22.04 的 clang 14 而折腾 apt.llvm.org + update-alternatives
+        # 🛡️【史诗级大坑修复6】ubuntu-26.04 预装 clang 21，原生支持 -std=c++23，
+        #    根本不需要再装任何 LLVM 官方包。
+        #    此前为迁就更老 runner 的 clang 14 而折腾 apt.llvm.org + update-alternatives
         #    的整套操作在此全部删掉，连带消灭了三类翻车可能：
         #      ① --install 参数个数写错
         #      ② alternatives 组名与系统已有的 clang 组冲突

@@ -9,7 +9,7 @@ on:
 
 jobs:
   keepalive:
-    runs-on: ubuntu-26.04 （主力环境） （22.04 runner 2027-04-17 停止支持）
+    runs-on: ubuntu-26.04 # 🖥️ 唯一运行环境
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
@@ -21,19 +21,12 @@ jobs:
           key: ${{ runner.os }}-openwrt-ccache-latest
 
       - name: 🧰 Touch & Renew Toolchain Lifespan (呼叫重工制造机，为时空魔法续命)
-        # 🛡️ toolchain 缓存已按 runner 版本隔离（key 里带 Ubuntu 版本），
-        #    所以 24.04 与 26.04 两份都要续命，任一版本都保持 7 天不被清理。
+        # 🛡️ toolchain 缓存 key 带 Ubuntu 版本号（Linux-ubuntu-26.04-...），
+        #    续命保证它 7 天不被 GitHub 清理，下次构建直接命中。
         uses: actions/cache/restore@v5
         with:
           path: openwrt/staging_dir
           key: ${{ runner.os }}-ubuntu-26.04-openwrt-toolchain-latest
-          continue-on-error: true
-
-      - name: 🧰 Touch & Renew Toolchain Lifespan (备用环境 24.04)
-        uses: actions/cache/restore@v5
-        with:
-          path: openwrt/staging_dir
-          key: ${{ runner.os }}-ubuntu-24.04-openwrt-toolchain-latest
           continue-on-error: true
 
       - name: 🎉 Success Verification

@@ -56,14 +56,6 @@ on:
         required: false
         type: boolean
         default: true
-      runner_os:
-        description: "🖥️ 选择 runner 基础环境（26.04 为主力，24.04 为备用）"
-        required: false
-        type: choice
-        default: ubuntu-26.04
-        options:
-          - ubuntu-26.04
-          - ubuntu-24.04
 
 env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多常用的常量封印到这）
   REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
@@ -81,9 +73,7 @@ env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多�
 
 jobs:
   build:
-    # 🖥️ runner 由 workflow_dispatch 的 runner_os 决定；定时任务(schedule)无该输入，
-    #    自动回落到默认的 ubuntu-26.04。24.04 保留为备用方案。
-    runs-on: ${{ inputs.runner_os || 'ubuntu-26.04' }}
+    runs-on: ubuntu-26.04 # 🖥️ 唯一运行环境
     env: # 🏢 Job 层级环境变量：这就像是在具体工位的桌子上贴了层最高指令
       # 🗂️ 全局动态变量占位符（消除 IDE 的未声明警告，后续运行中会被脚本塞入真实数据）
       WORK_DIR: /workdir
@@ -133,8 +123,8 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive # 🤖【机器人模式光环】: 有任何弹窗问“是/否”一律默认执行免卡死模式！
         run: |
-          # 🛡️【史诗级大坑修复5】apt 依赖已取 noble(24.04) 与 resolute(26.04) 两个源的【交集】，
-          #    并用两套 Packages 索引逐包实测通过（109+3 个包，两边均可用）。
+          # 🛡️【史诗级大坑修复5】apt 依赖取 noble(24.04) 与 resolute(26.04) 两源的【交集】110 包，
+          #    并用两套 Packages 索引逐包实测通过。交集保证升级到 26.04 时不会缺包。
           #    任何一个包在源里缺失，apt-get install 整条命令就会失败，job 第一分钟就挂。
           #    关键改动：删 python2.7 / libncurses5-dev / libncursesw5-dev / libz-dev /
           #    ncurses-dev / p7zip / p7zip-full / libpcre3-dev，
@@ -174,10 +164,9 @@ jobs:
           echo "WORK_DIR=/workdir" >> $GITHUB_ENV
 
       - name: 🔧 Verify Clang supports C++23 (gn 的硬性要求)
-        # 🛡️【史诗级大坑修复6】ubuntu-26.04 镜像预装 clang 21、ubuntu-24.04 预装 clang 18，
-        #    都原生支持 -std=c++23，
-        #    根本不需要再装什么 LLVM 官方包——之前在 ubuntu-22.04 上折腾 apt.llvm.org +
-        #    update-alternatives 的那套操作全部可以删掉，连带消灭了三类翻车可能：
+        # 🛡️【史诗级大坑修复6】ubuntu-26.04 镜像预装 clang 21，原生支持 -std=c++23，
+        #    根本不需要再装任何 LLVM 官方包——早期为迁就更老 runner 的 clang 14 而折腾
+        #    apt.llvm.org + update-alternatives 的那套操作全部删掉了，连带消灭了三类翻车可能：
         #      ① --install 参数个数写错 ② alternatives 组名与系统已有组冲突
         #      ③ 镜像 PATH 里 /usr/lib/llvm-14/bin 排在 /usr/bin 之前导致重定向漏网
         #    现在只做「只读自检」：确认 clang++ 真的支持 -std=c++23，
@@ -247,7 +236,7 @@ jobs:
         run: |
           echo "🔍 正在向 GitHub 总机发送幽灵探测包，扒出云端 Toolchain 缓存的精确字节数..."
           # 调用底层接口：拿取名为 -toolchain-latest 的包裹内部档案薄，精准抽出 'size_in_bytes' 
-          SIZE_BYTES=$(gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-${{ inputs.runner_os || 'ubuntu-26.04' }}-openwrt-toolchain-latest | jq -r '.actions_caches[0].size_in_bytes // 0')
+          SIZE_BYTES=$(gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-ubuntu-26.04-openwrt-toolchain-latest | jq -r '.actions_caches[0].size_in_bytes // 0')
           
           # 将字节换算为 MB 方便人看
           SIZE_MB=$((SIZE_BYTES / 1024 / 1024))
@@ -277,7 +266,7 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: openwrt/staging_dir
-          key: ${{ runner.os }}-${{ inputs.runner_os || 'ubuntu-26.04' }}-openwrt-toolchain-latest
+          key: ${{ runner.os }}-ubuntu-26.04-openwrt-toolchain-latest
 
       - name: 📊 Check Toolchain Size (Restore)
         run: |
@@ -483,7 +472,7 @@ jobs:
           echo "📊 [保存前] Toolchain 最新物理体积："
           du -sh ${{ env.WORK_DIR }}/openwrt/staging_dir || true
           echo "🔍 正在抹除云端所有存在的 Toolchain 缓存..."
-          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-${{ inputs.runner_os || 'ubuntu-26.04' }}-openwrt-toolchain-latest \
+          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-ubuntu-26.04-openwrt-toolchain-latest \
             | jq -r '.actions_caches[].id' \
             | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
           gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
@@ -495,7 +484,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: openwrt/staging_dir
-          key: ${{ runner.os }}-${{ inputs.runner_os || 'ubuntu-26.04' }}-openwrt-toolchain-latest
+          key: ${{ runner.os }}-ubuntu-26.04-openwrt-toolchain-latest
 
 
       - name: 🧹 Rebuild Ccache Throne # 🧹 为金库新王登基彻底清空王座！
