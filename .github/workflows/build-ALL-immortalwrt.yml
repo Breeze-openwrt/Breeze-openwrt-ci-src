@@ -296,7 +296,7 @@ jobs:
         with:
           path: openwrt/.ccache
           # 👑 我们彻底抛弃了乱码随机后缀，从此全服只有一个王储名字：latest
-          key: ${{ runner.os }}-openwrt-ccache-latest
+          key: ${{ runner.os }}-ubuntu-26.04-openwrt-ccache-latest
 
       - name: 📊 Check Ccache Size (Restore)
         run: |
@@ -308,6 +308,45 @@ jobs:
           fi
 
       # ================== 👇 核心高能区域：买菜洗菜环节 ==================
+      - name: 🔧 Tune ccache (命中率调优)
+        # 🛡️ 编译提速核心：ccache 是这条流水线唯一的大杠杆。
+        #    实测（run 39352382702，日志逐段还原的时间分布）：
+        #      Compile Yashe  1h42m33s  ← 占全流程 87%
+        #      Compile Taiyi     5m26s  ← 两套配置几乎相同，第二次几乎全命中
+        #    → 说明 ccache 本身工作得很好，问题出在【跨 run 的缓存被版本污染】。
+        #    实测命中率仅 14.59%（84165 次可缓存调用中 71882 次 miss），
+        #    且缓存已用 3.6/5.0 GiB（72.9%），触顶后被 LRU 淘汰，形成恶性循环。
+        #
+        #    根因：ccache 缓存 key 曾经不带版本号，里面混着 ubuntu-22.04 时代
+        #    用旧 target gcc 编出的产物；而 26.04 的 toolchain 缓存按版本隔离、
+        #    target gcc 重新编译，编译器指纹一变，旧条目全部 miss。
+        #    → key 改为与 toolchain 同版本，从根上杜绝再次混版。
+        #
+        #    本步只做互不破坏的调优，全部通过环境变量下发（ccache 里环境变量优先级最高，
+        #    不受配置文件路径影响），且都不改变任何已有条目的 hash：
+        #      ① max_size 5G→8G：只改淘汰阈值，已有条目照常命中
+        #      ② sloppiness：放宽与结果无关的检查（时间戳、宏定义等），只会多命中不会少
+        #      ③ CCACHE_DIR：确保编译期用的就是要被缓存的那个目录
+        #      ④ evict-older-than：淘汰陈旧条目，缓存目录不会无限膨胀
+        #    故意【不】设 CCACHE_BASEDIR：它会改变 hash 布局、作废现有全部条目，
+        #    而 runner 的工作目录是固定的（/home/runner/work/<repo>/<repo>），设它纯属净损失。
+        run: |
+          CCACHE_DIR="$GITHUB_WORKSPACE/openwrt/.ccache"
+          mkdir -p "$CCACHE_DIR"
+          echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=8G" >> $GITHUB_ENV
+          echo "CCACHE_SLOPPINESS=time_macros,pch_defines,include_file_mtime,include_file_ctime,file_stat_matches,system_headers" >> $GITHUB_ENV
+          CCACHE_BIN="$GITHUB_WORKSPACE/openwrt/staging_dir/host/bin/ccache"
+          if [ -x "$CCACHE_BIN" ]; then
+            echo "🧹 淘汰陈旧条目（超过 14 天未命中），避免缓存目录无限膨胀："
+            env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --evict-older-than=14 2>/dev/null || true
+            echo "🔍 当前生效的关键 ccache 配置（供事后判读，不靠猜）："
+            env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --show-config 2>/dev/null \
+              | grep -E '^(max_size|sloppiness|compiler_check|base_dir|direct_mode|hash_dir)' || true
+          else
+            echo "⚠️ 未找到 ccache 可执行文件（toolchain 缓存可能未命中），跳过调优"
+          fi
+
       - name: Prepare & Download (Yashe) # 🛒 检测：如果是点单选了 Yashe，那就按照它的菜单出击采购！
         id: package_yashe
         # 🛡️ 【逻辑加固】：原逻辑仅判断手动勾选，导致定时任务(schedule)时 inputs 为空从而被跳过。
@@ -455,7 +494,21 @@ jobs:
           echo "========= Ccache 极限压榨金库战果 ========="
           # 提取 OpenWrt 内部交叉编译好的原生宿主机 ccache 分析器，强制提取它刚才的所有拦截记录！
           if [ -x "openwrt/staging_dir/host/bin/ccache" ]; then
-            env CCACHE_DIR=$GITHUB_WORKSPACE/openwrt/.ccache openwrt/staging_dir/host/bin/ccache -s
+            STATS=$(env CCACHE_DIR=$GITHUB_WORKSPACE/openwrt/.ccache openwrt/staging_dir/host/bin/ccache -s)
+            echo "$STATS"
+            # ccache -s 输出形如：Hits:  12283 /  84165 (14.59%)
+            HIT_RATE=$(echo "$STATS" | grep -oE 'Hits: +[0-9]+ / +[0-9]+ [(][0-9.]+[%][)]' | grep -oE '[0-9.]+[%][)]' | tr -d '()%')
+            if [ -n "$HIT_RATE" ]; then
+              echo "🎯 本轮 ccache 命中率: ${HIT_RATE}%"
+              if awk "BEGIN{exit !($HIT_RATE < 50)}"; then
+                echo "⚠️ 命中率低于 50%，编译耗时会明显变长。排查方向："
+                echo "   ① toolchain 与 ccache 缓存版本不一致（target gcc 指纹变了 → 旧条目全 miss）"
+                echo "   ② ccache 缓存被 max_size 触顶后 LRU 淘汰"
+                echo "   ③ 看上方「🔍 当前生效的关键 ccache 配置」里的 compiler_check"
+              else
+                echo "✅ 命中率良好，缓存正在发挥预期作用"
+              fi
+            fi
           else
             echo "⚠️ 未找到编译后内网的 ccache 面板（可能首轮大循环未构建成功）。"
           fi
@@ -493,17 +546,13 @@ jobs:
           du -sh ${{ env.WORK_DIR }}/openwrt/.ccache || true
           echo "🔍 正在执行极简化缓存策略：抹除云端所有存在的 ccache 缓存，确保新版能100%成功覆盖写入..."
           
-          # 利用原生命令删除固定名称的最新缓存（不管有没有，闭眼轰炸一次出空位）
-          gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-openwrt-ccache-latest \
+          # 只删除【当前 key】的旧缓存，为随后的 save 腾出位置（否则 actions/cache/save 会撞 key）。
+          # 注意 xargs 加 -r：否则输入为空时它仍会空跑一次（对着空 id 发 DELETE）。
+          gh api -X GET "/repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-ubuntu-26.04-openwrt-ccache-latest" \
             | jq -r '.actions_caches[].id' \
-            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
-            
-          # 以防万一，顺手剿灭以前残留的所有乱码旧版怪胎
-          gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
-            | jq -r '.actions_caches[] | select(.key | startswith("${{ runner.os }}-openwrt-ccache-")) | .id' \
-            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
-            
-          echo "🎉 旧王座已被彻底清空！云端现在洁净如纸！"
+            | xargs -r -I {} gh api -X DELETE "/repos/${{ github.repository }}/actions/caches/{}" || true
+
+          echo "🎉 当前 key 的旧缓存已清空，即将写入本轮的新版本"
 
       - name: Save Updated Ccache # 💾 保存并升级金库！
         # 无论前面是读了旧缓存后更新的，还是全新生成的，我们最后都统一把它当做 latest 供奉到云端！
@@ -512,7 +561,7 @@ jobs:
         with:
           path: openwrt/.ccache
           # 👑 赐名 latest，独霸云端，天下仅此一份！
-          key: ${{ runner.os }}-openwrt-ccache-latest
+          key: ${{ runner.os }}-ubuntu-26.04-openwrt-ccache-latest
 
       - name: Delete workflow runs # 🧹 清理流水线死尸记录 (高并发阵列版)
         # ✨ 性能狂魔合并发包术：将系统 API 请求数量暴降 99%！
