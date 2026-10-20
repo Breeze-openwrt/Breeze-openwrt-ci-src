@@ -809,9 +809,14 @@ jobs:
           gh api -X GET /repos/${{ github.repository }}/actions/caches?key=${{ runner.os }}-ubuntu-26.04-openwrt-toolchain-latest \
             | jq -r '.actions_caches[].id' \
             | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
+          # 清理【所有非 26.04 的】Linux 缓存（僵尸清理）：
+          #   原来是 startswith("Linux-openwrt-toolchain-")，只匹配旧版命名，
+          #   而旧 key 早已被删 → 这条实际上一直是个空操作。
+          #   现在改成「凡是不带 ubuntu-26.04- 的 Linux 缓存一律清掉」，
+          #   以后即使切回别的 Ubuntu 版本，也不会留下吃满 10GB 配额的僵尸条目。
           gh api -X GET /repos/${{ github.repository }}/actions/caches?per_page=100 \
-            | jq -r '.actions_caches[] | select(.key | startswith("${{ runner.os }}-openwrt-toolchain-")) | .id' \
-            | xargs -I {} gh api -X DELETE /repos/${{ github.repository }}/actions/caches/{} || true
+            | jq -r '.actions_caches[] | select(.key | startswith("${{ runner.os }}-")) | select(.key | contains("ubuntu-26.04-") | not) | .id' \
+            | xargs -r -I {} gh api -X DELETE "/repos/${{ github.repository }}/actions/caches/{}" || true
 
       - name: Save Updated Toolchain # 💾 供奉新一代重工制造机！
         if: success()
