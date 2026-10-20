@@ -307,21 +307,30 @@ jobs:
             # 🛡️ 引入 sudo 暴力降维打击：强行破译那些被编译器锁死成“只读 (Read-Only 555)”的核心组件！
             # 🛡️ 核心修复 (-h 参数)：专门对付 OpenWrt 里那堆乱指的“死链(断头软链接)”。强行只盖戳在链接本身，绝不去追踪那个已经被我们扔掉的源文件！
             # 附加 || true 终极法盾：无视极个别死脑筋软链接的报错，强行完成全盘时间戳篡改！
-            # ⭐【照搬官方 VIKINGYFY/OpenWRT-CI 的精准做法】
-          #    官方原句：
-          #      find "./wrt/staging_dir" -type d -name "stamp" -not -path "*target*" | \
-          #        while read -r DIR; do find "$DIR" -type f -exec touch {} +; done
-          #    关键差异：官方【只 touch stamp 目录里的文件】，并且【排除 target*】。
-          #    本项目原来是把整个 staging_dir（含 target 交叉工具链）全部 touch 一遍 ——
-          #    这会让 target gcc 的 mtime 每轮都变，而 ccache 的 compiler_check 默认按 mtime 判定，
-          #    于是每一轮编译的缓存条目在下一轮【全部 miss】，命中率被死死压在 15%。
-          #    改成精准版后：make 照样认为工具链是新的（不重编），
-          #    而 target gcc 的 mtime 保持缓存里的原值 → ccache 的 mtime 判定重新生效。
-          #    （配合 CCACHE_COMPILERCHECK=content 双保险，两条路都通。）
-          find openwrt/staging_dir -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
-            find "$DIR" -type f -exec touch {} + 2>/dev/null || true
-          done
-            echo "🎉 瞒天过海成功！系统已将旧工具箱认定为新鲜出厂状态！"
+            # 🛡️【Time Magic · 稳定优先版】
+          # 目标有两个，且必须同时满足：
+          #   ① make 绝不能认为工具链过期 → 触发重编整个交叉工具链（20~30 分钟，纯浪费）
+          #   ② 不能改动参与 ccache「编译器指纹」计算的那些文件的 mtime
+          #
+          # 官方 VIKINGYFY/OpenWRT-CI 的写法是「只 touch stamp 目录、排除 target*」：
+          #   find "./wrt/staging_dir" -type d -name "stamp" -not -path "*target*" | ...
+          # 那是因为官方【不缓存 target 交叉工具链】、每轮都重编，touch stamp 就够了。
+          # 但本项目【缓存了 target 工具链】，只 touch stamp 会让恢复出来的 target gcc
+          # 保持旧时间戳 → make 判定它比源码旧 → 触发工具链重编。
+          #
+          # 所以这里采用第三种写法：全量 touch（保持原版「工具链永远是最新的」保证），
+          # 只把 target 下的【编译器二进制】排除掉：
+          #   bin/      → aarch64-openwrt-linux-musl-gcc 等驱动包装器
+          #   libexec/  → cc1 / collect2 / lto1 等后端程序
+          # 这些正是 ccache compiler_check（mtime 或 content）要哈希的对象。
+          # 其余文件（库、头文件、工具）照常 touch，它们不参与编译器指纹。
+          find openwrt/staging_dir -type f \
+            ! -path "*/target-*/bin/*" ! -path "*/target-*/libexec/*" \
+            -exec touch -h {} + 2>/dev/null || true
+          # 💡 为什么【不】用「只 touch stamp」：那会让 make 有机会重编交叉工具链，
+          #    稳定能用是第一优先级，不能为了 ccache 命中率去冒重编的风险。
+          echo "✅ Time Magic 完成：工具链时间戳已刷新（编译器二进制保持原状，ccache 指纹稳定）"
+          echo "🎉 瞒天过海成功！系统已将旧工具箱认定为新鲜出厂状态！"
           else
             echo "⚠️ 尚未发掘出任何旧有制造机，本次将纯靠双手硬撸。"
           fi
@@ -685,7 +694,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          KEEP=3
+          KEEP=5
           for PREFIX in OpenWrt_bin OpenWrt_Custom_firmware_Package; do
             IDS=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
               --jq "[.artifacts[] | select(.name | startswith(\"$PREFIX\"))] | sort_by(.created_at) | reverse | .[$KEEP:] | .[].id" 2>/dev/null || true)
@@ -705,8 +714,8 @@ jobs:
         with:
           name: OpenWrt_bin${{ env.FILE_DATE }}
           path: openwrt/bin
-          # 保留 14 天即可（默认 90 天太久了，本仓库 artifact 单个近 600MB）
-          retention-days: 14
+          # 保留 30 天（默认 90 天太久了，本仓库 artifact 单个近 600MB）
+          retention-days: 30
 
       - name: Organize ALL output files # 🧲 万磁王：全范围收割成品刷机包
         id: organize
@@ -740,7 +749,7 @@ jobs:
         if: steps.organize.outputs.status == 'success'
         with:
           name: OpenWrt_Custom_firmware_Package${{ env.FILE_DATE }}
-          retention-days: 14
+          retention-days: 30
           path: ${{ env.FIRMWARE }}
 
       - name: Generate release tag
