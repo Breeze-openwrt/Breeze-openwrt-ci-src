@@ -735,14 +735,16 @@ jobs:
           du -sh $GITHUB_WORKSPACE/firmware
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: 🧹 Clean metadata from build output # 🧹 按官方做法剔除产物里的构建元数据
-        # 照搬官方 VIKINGYFY/OpenWRT-CI 的收尾动作：
-        #   find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
-        # 这些 buildinfo/json 是给 CI 过程用的中间产物，混进 Release 只会让人误以为是固件的一部分。
-        run: |
-          cd openwrt
-          find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} + 2>/dev/null || true
-          echo "🧹 已清理产物元数据"
+      # ⚠️ 这里【曾经】照搬官方 VIKINGYFY/OpenWRT-CI 加过一个产物元数据清理步骤：
+      #   find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
+      # 现已【移除】，原因有二（稳定性/功能优先）：
+      #   ① 它会【改变 Release 的资产构成】——本项目 Release 历来包含 config.buildinfo、
+      #      feeds.buildinfo、version.buildinfo、profiles.json 这四个构建元信息，
+      #      删掉后下轮 Release 会从 12 个资产变成 8 个，用户对比历史 release 会以为出了问题。
+      #   ② 它会连带删掉 bin/targets/*/*/packages 目录里的全部 .apk 软件包，
+      #      而 OpenWrt_bin artifact 正是上传 openwrt/bin 的，用户从 artifact 取软件包
+      #      依赖这个目录 —— 删了就取不到了。
+      # 官方这么做的前提是他们的 Release 只放固件；本项目的 Release 构成与之不同，不能照搬。
 
       - name: Upload firmware directory # 📦 【内部发货】
         uses: actions/upload-artifact@v6
