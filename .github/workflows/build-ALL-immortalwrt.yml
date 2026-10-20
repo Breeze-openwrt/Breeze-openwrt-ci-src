@@ -346,6 +346,37 @@ jobs:
           fi
 
       # ================== 👇 核心高能区域：买菜洗菜环节 ==================
+      - name: 📊 Audit cache usage (GitHub 10GB 仓储上限监控)
+        # 🛡️ 监控仓储占用，避免触发 GitHub 的 LRU 驱逐。
+        # GitHub 限制（docs.github.com/actions/reference/workflows-and-actions/dependency-caching）：
+        #   · 仓库所有缓存条目合计 ≤ 10 GB（不是单条目上限）
+        #   · 超限后按 last-access 从旧到新驱逐，每小时检查一次
+        #   · 7 天未访问的条目自动删除
+        #   · 官方明确警告超限会导致 cache thrashing（缓存反复被建又被删，命中率永远上不去）
+        # 本仓库采用「固定 key + 先删后存」→ 条目数恒定为 2，不会累积；
+        # 但仍需监控，以免以后调整缓存大小时超限。
+        run: |
+          TOTAL=0
+          gh api "repos/${{ github.repository }}/actions/caches?per_page=100" \
+            --jq '.actions_caches[] | "\(.key) \(.size_in_bytes)"' 2>/dev/null \
+            | while IFS= read -r LINE; do
+                KEY=$(echo "$LINE" | awk '{print $1}')
+                SZ=$(echo "$LINE" | awk '{print $2}')
+                [ -z "$KEY" ] && continue
+                HUMAN=$(awk -v b="$SZ" 'BEGIN{printf "%.1f MB", b/1048576}')
+                echo "   📦 $KEY = $HUMAN"
+                echo "$SZ" >> /tmp/_cachesz
+              done
+          TOTAL=$(cat /tmp/_cachesz 2>/dev/null | awk '{s+=$1} END{print s+0}')
+          rm -f /tmp/_cachesz
+          HUMAN=$(awk -v b="$TOTAL" 'BEGIN{printf "%.2f GB", b/1073741824}')
+          echo "📊 仓库缓存总占用: $HUMAN / 10 GB 上限"
+          if [ "$TOTAL" -gt 8388608000 ]; then
+            echo "⚠️ 已超过 8 GB（上限 10 GB），请立即缩小 ccache 的 max_size 或清理旧条目"
+          else
+            echo "✅ 缓存占用安全（余量 $((8388608000 - TOTAL)) 字节）"
+          fi
+
       - name: 🔧 Tune ccache (命中率调优)
         # 🛡️ 编译提速核心：ccache 是这条流水线唯一的大杠杆。
         #    实测（run 39352382702，日志逐段还原的时间分布）：
@@ -362,7 +393,19 @@ jobs:
         #
         #    本步只做互不破坏的调优，全部通过环境变量下发（ccache 里环境变量优先级最高，
         #    不受配置文件路径影响），且都不改变任何已有条目的 hash：
-        #      ① max_size 5G→8G：ccache 自身的淘汰阈值，OpenWrt 未设置，纯 CI 层
+        #      ① max_size 设为 4G：ccache 自身的淘汰阈值，OpenWrt 未设置，纯 CI 层
+        #         ⚠️【上限推导 · 别随手调大】
+        #         GitHub 官方限制（docs.github.com/actions/reference/workflows-and-actions/dependency-caching）：
+        #           · 仓库【所有缓存条目合计】上限 10 GB（不是单条目上限）
+        #           · 超出后按 last-access 从旧到新 LRU 驱逐，且【每小时】检查一次
+        #           · 7 天未访问的条目自动删除
+        #           · 官方明确警告超限会导致 cache thrashing（缓存反复被建又被删，命中率永远上不去）
+        #         本仓库的缓存构成：ccache 一份 + toolchain 一份（固定 key，先删后存 → 条目数恒定为 2）
+        #           ccache 4G + toolchain 0.6G = 4.6 GB，距 10 GB 上限留有一倍以上余量 ✅
+        #         之前设的 8G 有真实风险：8G + 0.6G = 8.6 GB，只剩 1.4 GB 余量；
+        #         一旦越线，LRU 可能把【刚用过的 toolchain 缓存】也挤掉，
+        #         下一轮就得重编整个交叉工具链（20~30 分钟），且每轮重传 8GB 要多花 1 分多钟。
+        #         4G 足够装下一轮完整构建产出的条目（实测一轮净增约 2.5~3GB）。
         #      ② CCACHE_DIR：确保编译期用的就是要被缓存的那个目录（与 OpenWrt 的
         #         export CCACHE_DIR:=$(TOPDIR)/.ccache 指向同一处）
         #      ③ evict-older-than：ccache 标准的自淘汰机制（本来就是 LRU 淘汰，
@@ -378,7 +421,7 @@ jobs:
           CCACHE_DIR="$GITHUB_WORKSPACE/openwrt/.ccache"
           mkdir -p "$CCACHE_DIR"
           echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
-          echo "CCACHE_MAXSIZE=8G" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=4G" >> $GITHUB_ENV
           # 🛡️ 显式固定 compiler_check=content（ccache 4.x 默认值，这里只是写死以防默认值变化）：
           #    用【内容】而非【mtime】判断编译器是否变化。
           #    「Time Magic - Fix Toolchain Timestamps」会 touch staging_dir 里的 target gcc，
