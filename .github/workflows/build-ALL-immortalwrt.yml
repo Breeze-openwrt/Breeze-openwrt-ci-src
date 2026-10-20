@@ -8,6 +8,15 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 # -----------------------------------------------------------------------------
+# 🧭 【长期维护红线 · 优化只发生在 CI 层】
+#    本流水线服务于「长期、可持续、跟得上上游」的 OpenWrt 编译，因此：
+#      ✗ 不修改 OpenWrt 源码（不 sed 源码、不打私有补丁、不改上游 Makefile）
+#      ✗ 不改变编译语义（不改 make 参数含义、不改 .config 的标准启用方式）
+#      ✗ 不覆盖上游的既定策略（例如 rules.mk 里的 CCACHE_NOCOMPRESS）
+#      ✓ 优化只允许落在：runner 选择、缓存策略、观测手段、并发与下载加速
+#    这样将来 OpenWrt 升级 / 换设备 / 换 runner / 换维护者，都能照常工作。
+#    本文件里任何「看起来能再快一点」的改动，都请先对照这条红线自查。
+# -----------------------------------------------------------------------------
 # 🌟 源码阅读与设计赏析：这是一份“豪华前台点单式”编译流水线配置！
 #    【作者意图】：为了不破坏原有的文件，我们新建了它。并赋予了它【互动式】的生命！
 #    【核心黑科技 - `workflow_dispatch: inputs`】：
@@ -324,30 +333,38 @@ jobs:
         #
         #    本步只做互不破坏的调优，全部通过环境变量下发（ccache 里环境变量优先级最高，
         #    不受配置文件路径影响），且都不改变任何已有条目的 hash：
-        #      ① max_size 5G→8G：只改淘汰阈值，已有条目照常命中
-        #      ② sloppiness：放宽与结果无关的检查（时间戳、宏定义等），只会多命中不会少
-        #      ③ CCACHE_DIR：确保编译期用的就是要被缓存的那个目录
-        #      ④ evict-older-than：淘汰陈旧条目，缓存目录不会无限膨胀
+        #      ① max_size 5G→8G：ccache 自身的淘汰阈值，OpenWrt 未设置，纯 CI 层
+        #      ② CCACHE_DIR：确保编译期用的就是要被缓存的那个目录（与 OpenWrt 的
+        #         export CCACHE_DIR:=$(TOPDIR)/.ccache 指向同一处）
+        #      ③ evict-older-than：ccache 标准的自淘汰机制（本来就是 LRU 淘汰，
+        #         只是把门槛从默认提前到 14 天），不改变 ccache 的行为语义
+        #      ④ compiler_check=content：ccache 4.x 的默认值，写死以防将来默认值变化
+        #         被「Time Magic touch 全部文件」带偏
         #    故意【不】设 CCACHE_BASEDIR：它会改变 hash 布局、作废现有全部条目，
         #    而 runner 的工作目录是固定的（/home/runner/work/<repo>/<repo>），设它纯属净损失。
+        #    故意【不】设 CCACHE_COMPRESS / CCACHE_SLOPPINESS：前者覆盖了 OpenWrt
+        #    rules.mk 里 export CCACHE_NOCOMPRESS:=true 的上游取舍，后者降低严格性 ——
+        #    两者都属于「改上游行为」，等命中率根因查清后再决定，而不是先下药。
         run: |
           CCACHE_DIR="$GITHUB_WORKSPACE/openwrt/.ccache"
           mkdir -p "$CCACHE_DIR"
           echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
           echo "CCACHE_MAXSIZE=8G" >> $GITHUB_ENV
-          echo "CCACHE_SLOPPINESS=time_macros,pch_defines,include_file_mtime,include_file_ctime,file_stat_matches,system_headers" >> $GITHUB_ENV
-          # 🛡️ 压缩：OpenWrt 的 rules.mk 里有 export CCACHE_NOCOMPRESS:=true，
-          #    也就是【不压缩】存缓存 —— 同一个上限能装的条目数就少得多。
-          #    实测缓存已用 3.6/5.0 GiB（72.9%）触顶被 LRU 淘汰，
-          #    正是"不压缩 + 装不下"造成的。打开压缩后同样的空间能装 3~5 倍条目，
-          #    被淘汰的条目随之减少，命中率自然上升。
-          #    ccache 用不同子目录区分压缩/非压缩的条目，两种模式可以共存，不会作废旧条目。
-          echo "CCACHE_COMPRESS=true" >> $GITHUB_ENV
-          # 🛡️ 显式固定 compiler_check=content（ccache 4.x 默认值，但显式写死更可控）：
+          # 🛡️ 显式固定 compiler_check=content（ccache 4.x 默认值，这里只是写死以防默认值变化）：
           #    用【内容】而非【mtime】判断编译器是否变化。
           #    「Time Magic - Fix Toolchain Timestamps」会 touch staging_dir 里的 target gcc，
           #    若走 mtime 判定就会导致每次编译全部 miss。content 判定不受 touch 影响。
           echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
+          # 🛡️【刻意不设的两项 · 长期兼容 OpenWrt 的红线】
+          #    1) CCACHE_COMPRESS —— OpenWrt 的 rules.mk 明确 export CCACHE_NOCOMPRESS:=true，
+          #       那是上游对「编译速度 vs 缓存体积」的既定取舍。改它等于替上游改策略，
+          #       而且压缩/非压缩的条目互不通用，切换后旧的缓存条目会作废。
+          #       在命中率低的根因还没查清之前就动它，属于未诊断先下药。
+          #    2) CCACHE_SLOPPINESS —— 放宽检查会降低 ccache 的严格性。
+          #       同样等根因明确、确认是「无害差异导致 miss」之后再有针对性地单独放开某一项。
+          #    原则：优化只发生在 CI 层（缓存策略、观测手段），
+          #          不改 OpenWrt 源码、不改编译语义、不覆盖上游既定策略，
+          #          这样将来 OpenWrt 升级 / 换设备 / 换 runner 都能照常工作。
           CCACHE_BIN="$GITHUB_WORKSPACE/openwrt/staging_dir/host/bin/ccache"
           if [ -x "$CCACHE_BIN" ]; then
             echo "🧹 淘汰陈旧条目（超过 14 天未命中），避免缓存目录无限膨胀："
