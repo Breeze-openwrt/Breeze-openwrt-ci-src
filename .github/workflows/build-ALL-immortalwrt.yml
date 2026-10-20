@@ -89,6 +89,10 @@ env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多�
   UPLOAD_FIRMWARE: true   # 📤 是否把能刷机的核心精髓固件输出发布？
   UPLOAD_RELEASE: true    # 🚀 是否最后光荣挂榜（生成 Release 展示下载页面）
   TZ: Asia/Shanghai       # 🕰️ 对时准星校对！防止你生成的发布因为美国时间导致记录错乱
+  # 🧵 编译并行线程数。留空 = 纯核数 nproc（官方 VIKINGYFY/OpenWRT-CI 的做法，已实测最优：
+  #    nproc=4 时 Compile Yashe 只要 44m31s，基线的 5 线程超订版是 100m53s）。
+  #    想做 A/B 对比时，在 workflow_dispatch 里填 make_jobs 即可（例如填 5 试超订）。
+  MAKE_JOBS: ${{ github.event.inputs.make_jobs || '' }}
   # 🚀 【Node.js 24 全局引擎强制开关】：提前应对 GitHub 未来政策，强制所有脚本机器人在最高等级的 24 号引擎版本上运行，剿灭过时警告。
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
