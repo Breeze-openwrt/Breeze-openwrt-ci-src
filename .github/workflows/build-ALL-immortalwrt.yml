@@ -123,12 +123,13 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive # 🤖【机器人模式光环】: 有任何弹窗问“是/否”一律默认执行免卡死模式！
         run: |
-          # 🛡️【史诗级大坑修复5】apt 依赖取 noble(24.04) 与 resolute(26.04) 两源的【交集】110 包，
-          #    并用两套 Packages 索引逐包实测通过。交集保证升级到 26.04 时不会缺包。
-          #    任何一个包在源里缺失，apt-get install 整条命令就会失败，job 第一分钟就挂。
-          #    关键改动：删 python2.7 / libncurses5-dev / libncursesw5-dev / libz-dev /
-          #    ncurses-dev / p7zip / p7zip-full / libpcre3-dev，
-          #    改 gnutls-dev→libgnutls28-dev、mkisofs→genisoimage、p7zip→7zip。
+          # 🛡️【史诗级大坑修复5】下面这 110 个包逐一对照 ubuntu 26.04 (resolute) 的
+          #    Packages 索引实测过，全部可用。任何一个包在源里缺失，
+          #    apt-get install 整条命令就会失败，job 第一分钟就挂。
+          #    注意：gnutls-dev / mkisofs / p7zip / p7zip-full / libpcre3-dev /
+          #    python2.7 / libncurses5-dev / libncursesw5-dev / libz-dev / ncurses-dev
+          #    在 26.04 源中已不存在或已改名，列表里用的是对应替代品：
+          #    libgnutls28-dev / genisoimage / 7zip。
           # ✨ 性能狂魔绝杀：合并 60 余行垃圾冗余重复的安装指令，解放服务器 I/O！
           # GitHub Action 的新机器其实已经很干净了，不需要上来先全盘跑好几圈升级（纯浪费生命）。
           # 🛡️ 终极屏蔽：强制切断所有 --no-install-recommends (不下载配套教程和无用推流模块，只装干货核心)，再减几分钟体积！
@@ -204,23 +205,6 @@ jobs:
 
       - name: Install feeds # 7️⃣：把我们订阅的所有小插件的目录都安装落户过来
         run: cd openwrt && ./scripts/feeds install -a
-
-      - name: 🔧 Patch gn (C++23 → C++2b 兼容补丁) # 🩹 兜底防线：防止 LLVM 源抽风导致编译再次翻车
-        # 🩹【史诗级大坑修复3·兜底】gn 的 build/gen.py 硬编码了 `-std=c++23`，
-        #    而老版本 clang（<17）只认识 `-std=c++2b`。两者指向的是同一份 C++23 标准草案，
-        #    功能完全等价，因此这里直接把 gen.py 里的拼写降级，绕开编译器版本依赖。
-        #    正常情况下上一步的 Clang 18 已经接管，这个补丁只是最后一道保险丝。
-        run: |
-          cd openwrt/feeds/packages/devel/gn
-          cp Makefile Makefile.orig
-          # 🧬 在 Host/Configure 调用 gen.py 之前，先把 gen.py 里的 c++23 改写为 c++2b
-          sed -i 's|^\t$(PYTHON) $(HOST_BUILD_DIR)/build/gen.py|\tsed -i "s/-std=c++23/-std=c++2b/g" $(HOST_BUILD_DIR)/build/gen.py\n\t$(PYTHON) $(HOST_BUILD_DIR)/build/gen.py|' Makefile
-          if grep -q 'c++2b' Makefile; then
-            echo "✅ gn 兼容补丁已生效：C++23 → C++2b（同一标准草案，等价安全）"
-          else
-            echo "⚠️ 补丁未生效（上游 Makefile 格式可能已变更），将完全依赖 Clang 18 兜底"
-            mv Makefile.orig Makefile
-          fi
 
       - name: Load custom configuration # 8️⃣：上自己的“微调小特权”
         run: |

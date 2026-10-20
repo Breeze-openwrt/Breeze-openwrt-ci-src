@@ -1,64 +1,21 @@
 
 ## 固件下载 [![](https://img.shields.io/badge/-支持设备、编译状态及固件下载-FFFFFF.svg)](#固件下载-)
 
- <summary><b>&nbsp;&nbsp;&nbsp; X86  设备编译状态及固件下载</b></summary>
+ <summary><b>&nbsp;&nbsp;&nbsp; 设备编译状态及固件下载</b></summary>
     
 <br/>
  
-点击下表中 [![](https://img.shields.io/badge/设备-passing-32CD32.svg)](https://github.com/tomclassplus/openwrt-ci/actions) 即可跳转到该设备固件下载页面
-|   序号    |     X86设备  |   X86设备编译状态及下载链接 |   插件配置   | 备注说明   |
-| :-----------------: | :-------------: |:-----------------: | :-----------------: |  :-----------------: | 
-| 1 |   [![](https://img.shields.io/badge/OpenWrt-x86_(64位)-FFFFFF.svg)](https://github.com/Sagit-chu/tomclassplus/blob/main/.github/workflows/build-openwrt.yml)    | [![](https://github.com/Sagit-chu/openwrt-ci/workflows/Build%20OpenWrt/badge.svg)](https://github.com/tomclassplus/openwrt-ci/actions/workflows/build-openwrt.yml) |[![](https://img.shields.io/badge/编译-配置-orange.svg)](https://github.com/tomclassplus/openwrt-ci/blob/main/.config) |  |  
+点击下表中 [![](https://img.shields.io/badge/设备-passing-32CD32.svg)](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/actions) 即可跳转到该设备固件下载页面
+|   序号    |     设备  |   设备编译状态及下载链接 |   插件配置   | 备注说明   |
+| :-----------------: | :-------------: |:-----------------: | :----------------: |  :-----------------: | 
+| 1 | jdcloud_re-ss-01 (Yashe) | [编译状态](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/actions/workflows/build-ALL-immortalwrt.yml) |[配置](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/blob/main/.configyashe) |  |
+| 2 | jdcloud_re-cs-07 (Taiyi) | [编译状态](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/actions/workflows/build-ALL-immortalwrt.yml) |[配置](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/blob/main/.configtaiyi) |  |
 
-**提示：**[![](https://img.shields.io/badge/设备-passing-32CD32.svg)](https://github.com/Sagit-chu/openwrt-ci/actions) 标志为正常，[![](https://img.shields.io/badge/设备-failing-DC143C.svg)](https://github.com/Sagit-chu/openwrt-ci/actions) 或 [![](https://img.shields.io/badge/设备-no_status-A9A9A9.svg)](https://github.com/Sagit-chu/openwrt-ci/actions) 不代表所有编译均失败。请点击 [![](https://img.shields.io/badge/设备-状态-32CD32.svg)](https://github.com/Sagit-chu/openwrt-ci/actions) 到 **Actions** 进一步查看。
+**提示：**[![](https://img.shields.io/badge/设备-passing-32CD32.svg)](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/actions) 标志为正常，[![](https://img.shields.io/badge/设备-failing-DC143C.svg)](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/actions) 或 [![](https://img.shields.io/badge/设备-no_status-A9A9A9.svg)](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/actions) 不代表所有编译均失败。请点击 [![](https://img.shields.io/badge/设备-状态-32CD32.svg)](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/actions) 到 **Actions** 进一步查看。
 
+固件产物发布在 [Releases](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/releases)，每个版本包含
+`immortalwrt-qualcommax-ipq60xx-<设备>-squashfs-sysupgrade.bin`、`-squashfs-factory.bin` 与 `-initramfs-uImage.itb`。
 
-
-
-## 原版openwrt编译方法（x86）在ubuntu 22.04 ，Debian 11：
-### 0.安装依赖
-不同的系统请参考[openwrt wiki](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem)
-```bash
-sudo apt update -y
-sudo apt full-upgrade -y
-sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
-git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
-libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
-mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip libpython3-dev qemu-utils \
-rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-```
-### 1.首次编译
-```bash
-git clone https://github.com/openwrt/openwrt -b openwrt-22.03 openwrt
-cd openwrt
-sed -i '$a src-git NueXini_Packages https://github.com/NueXini/NueXini_Packages.git' feeds.conf.default
-./scripts/feeds update -a
-./scripts/feeds install -a
-cp /usr/bin/upx staging_dir/host/bin
-cp /usr/bin/upx-ucl staging_dir/host/bin
-./scripts/feeds update -a
-./scripts/feeds install -a
-make menuconfig （此处可以直接下载config文件使用）
-make -j8 download V=s
-make -j1 V=s
-```
-### 2.第二次及后续编译
-```bash
-cd openwrt
-git pull
-./scripts/feeds update -a && ./scripts/feeds install -a
-make menuconfig
-make -j8 download
-make -j$(($(nproc) + 1)) V=s
-```
-### 3.重新配置：
-```bash
-rm -rf ./tmp && rm -rf .config
-make menuconfig
-make -j8 download
-make -j$(($(nproc) + 1)) V=s
-```
 ## 4.v2raya使用前配置
 ```bash
 # For advanced usage, please see /etc/config/v2raya
