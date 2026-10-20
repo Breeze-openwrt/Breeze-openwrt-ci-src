@@ -336,13 +336,33 @@ jobs:
           echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
           echo "CCACHE_MAXSIZE=8G" >> $GITHUB_ENV
           echo "CCACHE_SLOPPINESS=time_macros,pch_defines,include_file_mtime,include_file_ctime,file_stat_matches,system_headers" >> $GITHUB_ENV
+          # 🛡️ 压缩：OpenWrt 的 rules.mk 里有 export CCACHE_NOCOMPRESS:=true，
+          #    也就是【不压缩】存缓存 —— 同一个上限能装的条目数就少得多。
+          #    实测缓存已用 3.6/5.0 GiB（72.9%）触顶被 LRU 淘汰，
+          #    正是"不压缩 + 装不下"造成的。打开压缩后同样的空间能装 3~5 倍条目，
+          #    被淘汰的条目随之减少，命中率自然上升。
+          #    ccache 用不同子目录区分压缩/非压缩的条目，两种模式可以共存，不会作废旧条目。
+          echo "CCACHE_COMPRESS=true" >> $GITHUB_ENV
+          # 🛡️ 显式固定 compiler_check=content（ccache 4.x 默认值，但显式写死更可控）：
+          #    用【内容】而非【mtime】判断编译器是否变化。
+          #    「Time Magic - Fix Toolchain Timestamps」会 touch staging_dir 里的 target gcc，
+          #    若走 mtime 判定就会导致每次编译全部 miss。content 判定不受 touch 影响。
+          echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
           CCACHE_BIN="$GITHUB_WORKSPACE/openwrt/staging_dir/host/bin/ccache"
           if [ -x "$CCACHE_BIN" ]; then
             echo "🧹 淘汰陈旧条目（超过 14 天未命中），避免缓存目录无限膨胀："
             env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --evict-older-than=14 2>/dev/null || true
             echo "🔍 当前生效的关键 ccache 配置（供事后判读，不靠猜）："
             env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --show-config 2>/dev/null \
-              | grep -E '^(max_size|sloppiness|compiler_check|base_dir|direct_mode|hash_dir)' || true
+              | grep -E '^(max_size|sloppiness|compiler_check|base_dir|direct_mode|hash_dir|compression|cache_dir|temporary_dir)' || true
+            echo "🩺 诊断（定位命中率异常用，避免靠猜）："
+            echo "   · ccache 可执行文件 : $CCACHE_BIN"
+            echo "   · 版本              : $(env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --version 2>/dev/null | head -1)"
+            echo "   · PATH 里先命中的是 : $(command -v ccache 2>/dev/null || echo '(未找到)')"
+            echo "   · CCACHE_DIR        : $CCACHE_DIR"
+            echo "   · 该目录体积        : $(du -sh "$CCACHE_DIR" 2>/dev/null | cut -f1)"
+            echo "   · stats 文件        : $(ls -l --time-style=+%H:%M:%S "$CCACHE_DIR/stats" 2>/dev/null || echo '(无)')"
+            echo "   · 默认目录 ${HOME:-/root}/.ccache : $(du -sh "${HOME:-/root}/.ccache" 2>/dev/null | cut -f1 || echo '(不存在)')"
           else
             echo "⚠️ 未找到 ccache 可执行文件（toolchain 缓存可能未命中），跳过调优"
           fi
@@ -496,6 +516,9 @@ jobs:
           if [ -x "openwrt/staging_dir/host/bin/ccache" ]; then
             STATS=$(env CCACHE_DIR=$GITHUB_WORKSPACE/openwrt/.ccache openwrt/staging_dir/host/bin/ccache -s)
             echo "$STATS"
+            echo "🩺 诊断：stats 文件 $(ls -l --time-style=+%H:%M:%S "$GITHUB_WORKSPACE/openwrt/.ccache/stats" 2>/dev/null || echo '(无)')"
+            echo "   默认目录 ${HOME:-/root}/.ccache 体积: $(du -sh "${HOME:-/root}/.ccache" 2>/dev/null | cut -f1 || echo '(不存在)')"
+            echo "   本轮 ccache 目录体积: $(du -sh "$GITHUB_WORKSPACE/openwrt/.ccache" 2>/dev/null | cut -f1)"
             # ccache -s 输出形如：Hits:  12283 /  84165 (14.59%)
             HIT_RATE=$(echo "$STATS" | grep -oE 'Hits: +[0-9]+ / +[0-9]+ [(][0-9.]+[%][)]' | grep -oE '[0-9.]+[%][)]' | tr -d '()%')
             if [ -n "$HIT_RATE" ]; then
