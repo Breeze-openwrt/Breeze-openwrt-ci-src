@@ -167,14 +167,15 @@ jobs:
           sudo timedatectl set-timezone "$TZ"
           
           # ==================== 💎 直接启用系统主盘作为编译工作目录 ====================
-          # 📌 GitHub Actions 的 ubuntu-22.04 机器经过上面"强力拆迁"后，系统盘已有 50GB+ 可用空间，
+          # 📌 GitHub Actions 的 runner 机器经过上面"强力拆迁"后，系统盘已有 50GB+ 可用空间，
           #    完全满足 OpenWrt 编译需求，无需动态选盘，简洁可靠。
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
           echo "WORK_DIR=/workdir" >> $GITHUB_ENV
 
       - name: 🔧 Verify Clang supports C++23 (gn 的硬性要求)
-        # 🛡️【史诗级大坑修复6】ubuntu-24.04 镜像预装 clang 18，原生支持 -std=c++23，
+        # 🛡️【史诗级大坑修复6】ubuntu-26.04 镜像预装 clang 21、ubuntu-24.04 预装 clang 18，
+        #    都原生支持 -std=c++23，
         #    根本不需要再装什么 LLVM 官方包——之前在 ubuntu-22.04 上折腾 apt.llvm.org +
         #    update-alternatives 的那套操作全部可以删掉，连带消灭了三类翻车可能：
         #      ① --install 参数个数写错 ② alternatives 组名与系统已有组冲突
