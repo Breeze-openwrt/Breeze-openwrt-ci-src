@@ -442,15 +442,16 @@ jobs:
             echo "🧹 淘汰陈旧条目（超过 14 天未命中），避免缓存目录无限膨胀："
             env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --evict-older-than=14 2>/dev/null || true
             echo "🔍 当前生效的关键 ccache 配置（供事后判读，不靠猜）："
-            env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --show-config 2>/dev/null \
-              | grep -E '^(max_size|sloppiness|compiler_check|base_dir|direct_mode|hash_dir|compression|cache_dir|temporary_dir)' || true
+            # 原来用 grep 过滤关键项，结果【一行都没匹配到】—— 等于没观测。
+            # 现在直接打印全文，配置项一个不漏。
+            env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --show-config 2>&1 | sed -n '1,40p' || true
             echo "🩺 诊断（定位命中率异常用，避免靠猜）："
             echo "   · ccache 可执行文件 : $CCACHE_BIN"
             echo "   · 版本              : $(env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --version 2>/dev/null | head -1)"
             echo "   · PATH 里先命中的是 : $(command -v ccache 2>/dev/null || echo '(未找到)')"
             echo "   · CCACHE_DIR        : $CCACHE_DIR"
             echo "   · 该目录体积        : $(du -sh "$CCACHE_DIR" 2>/dev/null | cut -f1)"
-            echo "   · stats 文件        : $(ls -l --time-style=+%H:%M:%S "$CCACHE_DIR/stats" 2>/dev/null || echo '(无)')"
+            echo "   · stats 文件        : $(find "$CCACHE_DIR" -maxdepth 2 -name stats -printf '%p  (%TY-%Tm-%Td %TH:%TM:%TS)\n' 2>/dev/null | head -2 || echo '(无)')"
             echo "   · 默认目录 ${HOME:-/root}/.ccache : $(du -sh "${HOME:-/root}/.ccache" 2>/dev/null | cut -f1 || echo '(不存在)')"
           else
             echo "⚠️ 未找到 ccache 可执行文件（toolchain 缓存可能未命中），跳过调优"
@@ -642,14 +643,18 @@ jobs:
           if [ -x "openwrt/staging_dir/host/bin/ccache" ]; then
             STATS=$(env CCACHE_DIR=$GITHUB_WORKSPACE/openwrt/.ccache openwrt/staging_dir/host/bin/ccache -s)
             echo "$STATS"
-            echo "🩺 诊断：stats 文件 $(ls -l --time-style=+%H:%M:%S "$GITHUB_WORKSPACE/openwrt/.ccache/stats" 2>/dev/null || echo '(无)')"
+            echo "🩺 诊断：stats 文件 $(find "$GITHUB_WORKSPACE/openwrt/.ccache" -maxdepth 2 -name stats -printf '%p  (%TY-%Tm-%Td %TH:%TM:%TS)\n' 2>/dev/null | head -2 || echo '(无)')"
             echo "   默认目录 ${HOME:-/root}/.ccache 体积: $(du -sh "${HOME:-/root}/.ccache" 2>/dev/null | cut -f1 || echo '(不存在)')"
             echo "   本轮 ccache 目录体积: $(du -sh "$GITHUB_WORKSPACE/openwrt/.ccache" 2>/dev/null | cut -f1)"
             # ccache -s 输出形如：Hits:  12283 /  84165 (14.59%)
-            HIT_RATE=$(echo "$STATS" | grep -oE 'Hits: +[0-9]+ / +[0-9]+ [(][0-9.]+[%][)]' | grep -oE '[0-9.]+[%][)]' | tr -d '()%')
+            # ⚠️ 注意：ccache -s 里【有两个】Hits: 行（Cacheable calls 块 + Local storage 块），
+            #    必须只取第一个！否则 HIT_RATE 里会夹进换行符，
+            #    导致下面的 awk 语法报错、返回非 0，于是走进 else 分支
+            #    把「命中率低」误报成「✅ 命中率良好」—— 反向告警，比没有告警更糟。
+            HIT_RATE=$(echo "$STATS" | grep -oE 'Hits: +[0-9]+ / +[0-9]+ [(][0-9.]+[%][)]' | head -1 | grep -oE '[0-9.]+[%][)]' | tr -d '()%')
             if [ -n "$HIT_RATE" ]; then
               echo "🎯 本轮 ccache 命中率: ${HIT_RATE}%"
-              if awk "BEGIN{exit !($HIT_RATE < 50)}"; then
+              if awk "BEGIN{exit !($HIT_RATE < 50)}" 2>/dev/null; then
                 echo "⚠️ 命中率低于 50%，编译耗时会明显变长。排查方向："
                 echo "   ① toolchain 与 ccache 缓存版本不一致（target gcc 指纹变了 → 旧条目全 miss）"
                 echo "   ② ccache 缓存被 max_size 触顶后 LRU 淘汰"
