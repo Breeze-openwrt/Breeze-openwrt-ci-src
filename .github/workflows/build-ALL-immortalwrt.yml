@@ -364,8 +364,14 @@ jobs:
         #   · 官方明确警告超限会导致 cache thrashing（缓存反复被建又被删，命中率永远上不去）
         # 本仓库采用「固定 key + 先删后存」→ 条目数恒定为 2，不会累积；
         # 但仍需监控，以免以后调整缓存大小时超限。
+        env:
+          # 🛡️ 必须显式注入：gh CLI 需要 GH_TOKEN/GITHUB_TOKEN 才能调仓库 API。
+          #    没有它时 gh api 静默失败、被下面的 2>/dev/null 吞掉，
+          #    导致这一步永远显示「0.00 GB」—— 监控形同虚设。
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TOTAL=0
+          rm -f /tmp/_cachesz
           gh api "repos/${{ github.repository }}/actions/caches?per_page=100" \
             --jq '.actions_caches[] | "\(.key) \(.size_in_bytes)"' 2>/dev/null \
             | while IFS= read -r LINE; do
@@ -453,7 +459,14 @@ jobs:
             echo "🔍 当前生效的关键 ccache 配置（供事后判读，不靠猜）："
             # 原来用 grep 过滤关键项，结果【一行都没匹配到】—— 等于没观测。
             # 现在直接打印全文，配置项一个不漏。
-            env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --show-config 2>&1 | sed -n '1,40p' || true
+            # 🛡️ 这里必须显式把环境变量传给 --show-config：
+            #    本步骤里 echo "CCACHE_MAXSIZE=4G" >> $GITHUB_ENV 是【下一步】才生效的，
+            #    而 --show-config 读的是当前进程的环境 → 只会打印 (default) 5.0 GiB / mtime，
+            #    让人误以为「设了没生效」。实测编译期它们是生效的
+            #    （ccache -s 显示 Cache size 2.1 / 4.0 GiB），只是这里看不到。
+            #    显式传入 → 打印出来的就是编译时真正生效的值。
+            env CCACHE_DIR="$CCACHE_DIR" CCACHE_MAXSIZE=4G CCACHE_COMPILERCHECK=content \
+              "$CCACHE_BIN" --show-config 2>&1 | sed -n '1,40p' || true
             echo "🩺 诊断（定位命中率异常用，避免靠猜）："
             echo "   · ccache 可执行文件 : $CCACHE_BIN"
             echo "   · 版本              : $(env CCACHE_DIR="$CCACHE_DIR" "$CCACHE_BIN" --version 2>/dev/null | head -1)"
