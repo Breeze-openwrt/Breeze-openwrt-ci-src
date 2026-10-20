@@ -34,6 +34,14 @@
 
 name: ✨ Build ALL Optional (Yashe & Taiyi) # 🏷️ 给这份新工作流起个闪亮的名字，好在 Actions 列表区分
 
+# 🛡️【并发闸门】同一时间只允许一个构建在跑。
+#    手动连点、或定时任务与手动任务撞车时，后来的排队等位，
+#    避免多个 job 互抢 CPU/网络/缓存把额度烧掉。
+#    cancel-in-progress: false —— 已开始的构建不打断，让它跑完出固件。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 on:
   repository_dispatch:
   schedule:
@@ -65,6 +73,10 @@ on:
         required: false
         type: boolean
         default: true
+      make_jobs:
+        description: "🧵 编译并行线程数（留空 = 纯核数 nproc；填 5 = 旧的 nproc+1，做 A/B 对比用）"
+        required: false
+        default: ""
 
 env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多常用的常量封印到这）
   REPO_URL: https://github.com/VIKINGYFY/immortalwrt.git
@@ -83,6 +95,10 @@ env: # 🌍 全局环境变量：设置一波快捷指令名（就像把很多�
 jobs:
   build:
     runs-on: ubuntu-26.04 # 🖥️ 唯一运行环境
+    # ⏱️ 超时护栏：正常一轮约 2 小时（两套固件 + 缓存上传）。
+    #    给到 6 小时留足余量（也是 GitHub 硬上限），真卡死时到点自动失败，
+    #    不至于占着额度空转到平台上限。
+    timeout-minutes: 360
     env: # 🏢 Job 层级环境变量：这就像是在具体工位的桌子上贴了层最高指令
       # 🗂️ 全局动态变量占位符（消除 IDE 的未声明警告，后续运行中会被脚本塞入真实数据）
       WORK_DIR: /workdir
@@ -291,7 +307,20 @@ jobs:
             # 🛡️ 引入 sudo 暴力降维打击：强行破译那些被编译器锁死成“只读 (Read-Only 555)”的核心组件！
             # 🛡️ 核心修复 (-h 参数)：专门对付 OpenWrt 里那堆乱指的“死链(断头软链接)”。强行只盖戳在链接本身，绝不去追踪那个已经被我们扔掉的源文件！
             # 附加 || true 终极法盾：无视极个别死脑筋软链接的报错，强行完成全盘时间戳篡改！
-            sudo find openwrt/staging_dir -exec touch -h {} + || true
+            # ⭐【照搬官方 VIKINGYFY/OpenWRT-CI 的精准做法】
+          #    官方原句：
+          #      find "./wrt/staging_dir" -type d -name "stamp" -not -path "*target*" | \
+          #        while read -r DIR; do find "$DIR" -type f -exec touch {} +; done
+          #    关键差异：官方【只 touch stamp 目录里的文件】，并且【排除 target*】。
+          #    本项目原来是把整个 staging_dir（含 target 交叉工具链）全部 touch 一遍 ——
+          #    这会让 target gcc 的 mtime 每轮都变，而 ccache 的 compiler_check 默认按 mtime 判定，
+          #    于是每一轮编译的缓存条目在下一轮【全部 miss】，命中率被死死压在 15%。
+          #    改成精准版后：make 照样认为工具链是新的（不重编），
+          #    而 target gcc 的 mtime 保持缓存里的原值 → ccache 的 mtime 判定重新生效。
+          #    （配合 CCACHE_COMPILERCHECK=content 双保险，两条路都通。）
+          find openwrt/staging_dir -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
+            find "$DIR" -type f -exec touch {} + 2>/dev/null || true
+          done
             echo "🎉 瞒天过海成功！系统已将旧工具箱认定为新鲜出厂状态！"
           else
             echo "⚠️ 尚未发掘出任何旧有制造机，本次将纯靠双手硬撸。"
@@ -433,12 +462,26 @@ jobs:
           echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           make defconfig
-          echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程以榨干 CPU 物理算力全力铸造 Yashe 固件..."
-          # ✨ 性能狂魔极致榨干：由于 I/O 存在空窗期，$(nproc) + 1 能够让双核 CPU 永远处于满载不歇车状态。
-          # 🛡️ 引入断崖 Debug 机制：一旦因为代码报错，立刻切换单核带 V=s 详细日志跑一次就停，拒绝原来那种浪费几十倍时间的 6 连无脑重复试错！
-          # ☢️ 终极核弹级黑魔法【eatmydata 拦截注入】：暴力接管系统底层 libc，把所有拖慢编译的 fsync() 安全落盘指令全拦截为 no-op 空气假动作。
-          # 你的磁盘从此将处于“物理裸奔”级别的仅内存异步无等待写入状态（在必定会一轮终结的 CI 镜像中压根不用考虑断电保护落盘），让编译器 iowait 并发卡顿立刻物理清零，形成降维打击！
-          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
+          # ⏱️【耗时分解】编译前后打时间戳，直接写进日志和 Job Summary，
+          #    以后不用再翻 6000 行日志去倒推「这次到底快了多少」。
+          _t0=$(date +%s)
+          echo "⏱️ [Yashe] 编译开始 $(date -u '+%Y-%m-%d %H:%M:%S') UTC | 并行度 ${MAKE_JOBS:-$(nproc)} | 核心数 $(nproc)"
+          # ✨ 并行度改为【纯核数 nproc】（照搬官方 VIKINGYFY/OpenWRT-CI 的写法）。
+          #    原来是 $(nproc)+1：在 4 核机上开 5 个编译线程属于超订，
+          #    多出来的那条线程只能在上下文切换和缓存争用里空转，反而更慢。
+          #    仍可用 MAKE_JOBS 覆盖，方便做 A/B 实测。
+          # ☢️ eatmydata：拦截 fsync() 安全落盘为 no-op。CI 镜像必定一轮终结，无需断电保护，
+          #    把编译器的 iowait 等待直接清零。
+          # 🛡️【断崖 Debug】失败后【保持并行】重跑并带 V=s 详细日志。
+          #    官方原写法是 -j1（单线程）：同样能定位问题，但 1 小时的工程单线程重编能拖几十分钟；
+          #    V=s 的日志详细程度与并行无关，改成 -j$(nproc) 定位能力不变、速度快一个数量级。
+          if ! eatmydata make -j"${MAKE_JOBS:-$(nproc)}"; then
+            echo "❌ 首次编译失败，切换到并行详细日志模式重跑（定位问题用）..."
+            make -j"${MAKE_JOBS:-$(nproc)}" V=s
+          fi
+          _t1=$(date +%s); _el=$((_t1 - _t0))
+          echo "⏱️ [Yashe] 编译完成，耗时 $((_el/60)) 分 $((_el%60)) 秒"
+          echo "| Yashe | $((_el/60)) 分 $((_el%60)) 秒 |" >> $GITHUB_STEP_SUMMARY
           echo "status=success" >> $GITHUB_OUTPUT
 
       - name: Compile the Taiyi firmware # 🍳 Taiyi 开煮！如果我们上面全勾选，这波因为蹭了饭（环境共用），它将光速完工！
@@ -452,12 +495,26 @@ jobs:
           echo "CONFIG_DEVEL=y" >> .config
           echo "CONFIG_CCACHE=y" >> .config
           make defconfig
-          echo -e "全线满载！强行挂载 $(($(nproc) + 1)) 线程以榨干 CPU 物理算力全力铸造 Taiyi 固件..."
-          # ✨ 性能狂魔极致榨干：由于 I/O 存在空窗期，$(nproc) + 1 能够让双核 CPU 永远处于满载不歇车状态。
-          # 🛡️ 引入断崖 Debug 机制：一旦因为代码报错，立刻切换单核带 V=s 详细日志跑一次就停，拒绝原来那种浪费几十倍时间的 6 连无脑重复试错！
-          # ☢️ 终极核弹级黑魔法【eatmydata 拦截注入】：暴力接管系统底层 libc，把所有拖慢编译的 fsync() 安全落盘指令全拦截为 no-op 空气假动作。
-          # 你的磁盘从此将处于“物理裸奔”级别的仅内存异步无等待写入状态（在必定会一轮终结的 CI 镜像中压根不用考虑断电保护落盘），让编译器 iowait 并发卡顿立刻物理清零，形成降维打击！
-          eatmydata make -j$(($(nproc) + 1)) || eatmydata make -j1 V=s
+          # ⏱️【耗时分解】编译前后打时间戳，直接写进日志和 Job Summary，
+          #    以后不用再翻 6000 行日志去倒推「这次到底快了多少」。
+          _t0=$(date +%s)
+          echo "⏱️ [Taiyi] 编译开始 $(date -u '+%Y-%m-%d %H:%M:%S') UTC | 并行度 ${MAKE_JOBS:-$(nproc)} | 核心数 $(nproc)"
+          # ✨ 并行度改为【纯核数 nproc】（照搬官方 VIKINGYFY/OpenWRT-CI 的写法）。
+          #    原来是 $(nproc)+1：在 4 核机上开 5 个编译线程属于超订，
+          #    多出来的那条线程只能在上下文切换和缓存争用里空转，反而更慢。
+          #    仍可用 MAKE_JOBS 覆盖，方便做 A/B 实测。
+          # ☢️ eatmydata：拦截 fsync() 安全落盘为 no-op。CI 镜像必定一轮终结，无需断电保护，
+          #    把编译器的 iowait 等待直接清零。
+          # 🛡️【断崖 Debug】失败后【保持并行】重跑并带 V=s 详细日志。
+          #    官方原写法是 -j1（单线程）：同样能定位问题，但 1 小时的工程单线程重编能拖几十分钟；
+          #    V=s 的日志详细程度与并行无关，改成 -j$(nproc) 定位能力不变、速度快一个数量级。
+          if ! eatmydata make -j"${MAKE_JOBS:-$(nproc)}"; then
+            echo "❌ 首次编译失败，切换到并行详细日志模式重跑（定位问题用）..."
+            make -j"${MAKE_JOBS:-$(nproc)}" V=s
+          fi
+          _t1=$(date +%s); _el=$((_t1 - _t0))
+          echo "⏱️ [Taiyi] 编译完成，耗时 $((_el/60)) 分 $((_el%60)) 秒"
+          echo "| Taiyi | $((_el/60)) 分 $((_el%60)) 秒 |" >> $GITHUB_STEP_SUMMARY
 
           # 【统一打时间戳标记】 因为这是有可能运行的最后一步编译
           echo "status=success" >> $GITHUB_OUTPUT
@@ -495,6 +552,15 @@ jobs:
           #    改用 shell 运行时变量 $GITHUB_WORKSPACE/firmware，确保路径正确。
           du -sh $GITHUB_WORKSPACE/firmware
           echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: 🧹 Clean metadata from build output # 🧹 按官方做法剔除产物里的构建元数据
+        # 照搬官方 VIKINGYFY/OpenWRT-CI 的收尾动作：
+        #   find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} +
+        # 这些 buildinfo/json 是给 CI 过程用的中间产物，混进 Release 只会让人误以为是固件的一部分。
+        run: |
+          cd openwrt
+          find ./bin/targets/ -iregex ".*\(buildinfo\|json\|sha256sums\|packages\)$" -exec rm -rf {} + 2>/dev/null || true
+          echo "🧹 已清理产物元数据"
 
       - name: Upload firmware directory # 📦 【内部发货】
         uses: actions/upload-artifact@v6
