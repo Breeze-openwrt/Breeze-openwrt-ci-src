@@ -22,6 +22,16 @@ jobs:
 
       - name: 🚀 幽灵签到：执行空提交破解僵尸判定
         run: |
+          # 🛡️ 硬守卫：runner 必须是 26.04。
+          #    本项目已永久放弃 ubuntu-22.04（其 clang 不支持 gn 需要的 -std=c++23），
+          #    万一 runs-on 被改回旧镜像，这里第一分钟就拦下来，而不是等编译崩掉才发现。
+          OS_REL=$(lsb_release -rs 2>/dev/null || cat /etc/os-release | grep '^VERSION_ID=' | cut -d'"' -f2)
+          echo "🔍 发行版版本   : ${OS_REL:-未知}"
+          if ! echo "${OS_REL:-}" | grep -qE '^26\.04'; then
+            echo "❌ 致命：本项目已固定使用 ubuntu-26.04，当前环境是 '${OS_REL:-未知}'，拒绝继续！"
+            exit 1
+          fi
+          echo "✅ 守卫通过：环境版本符合要求 (26.04)"
           echo "🛡️ 开始执行物理防沉迷破解规避..."
           
           # 1. 伪装成官方机器人身份，避免污染你个人的提交记录

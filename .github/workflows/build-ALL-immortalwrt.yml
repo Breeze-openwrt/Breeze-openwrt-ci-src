@@ -164,15 +164,28 @@ jobs:
           sudo chown $USER:$GROUPS /workdir
           echo "WORK_DIR=/workdir" >> $GITHUB_ENV
 
-      - name: 🔧 Verify Clang supports C++23 (gn 的硬性要求)
-        # 🛡️【史诗级大坑修复6】ubuntu-26.04 镜像预装 clang 21，原生支持 -std=c++23，
-        #    根本不需要再装任何 LLVM 官方包——早期为迁就更老 runner 的 clang 14 而折腾
-        #    apt.llvm.org + update-alternatives 的那套操作全部删掉了，连带消灭了三类翻车可能：
+      - name: 🔧 Verify Runner & Clang (环境硬守卫)
+        # 🛡️【史诗级大坑修复6】本项目已永久固定在 ubuntu-26.04，不再回退到更老的 runner：
+        #    老镜像预装的 clang 认不认 -std=c++23 是个版本问题，而 ubuntu-26.04 预装 clang 21
+        #    原生支持，于是早期为迁就老编译器而折腾 apt.llvm.org + update-alternatives 的
+        #    那套操作全部删掉了，连带消灭了三类翻车可能：
         #      ① --install 参数个数写错 ② alternatives 组名与系统已有组冲突
         #      ③ 镜像 PATH 里 /usr/lib/llvm-14/bin 排在 /usr/bin 之前导致重定向漏网
-        #    现在只做「只读自检」：确认 clang++ 真的支持 -std=c++23，
-        #    不满足就立刻中止，绝不白跑一小时才在 package 阶段崩掉。
+        #
+        #    这里做「只读自检」：先断言 runner 确实是 26.04，再确认 clang++ 真的支持
+        #    -std=c++23。任何一条不满足就立刻中止，绝不白跑一小时才在 package 阶段崩掉。
         run: |
+          # 🛡️ 硬守卫：runner 必须是 26.04，否则直接拒绝开工。
+          #    万一有人把 runs-on 改回旧镜像，这里会在第一分钟就拦下来，
+          #    而不是等 gn 在 package 阶段炸掉才发现。
+          OS_REL=$(lsb_release -rs 2>/dev/null || cat /etc/os-release | grep '^VERSION_ID=' | cut -d'"' -f2)
+          echo "🔍 发行版版本   : ${OS_REL:-未知}"
+          if ! echo "${OS_REL:-}" | grep -qE '^26\.04'; then
+            echo "❌ 致命：本项目已固定使用 ubuntu-26.04，当前环境是 '${OS_REL:-未知}'，拒绝继续！"
+            echo "   ubuntu-22.04 已被永久放弃（其 clang 不支持 gn 需要的 -std=c++23）。"
+            exit 1
+          fi
+          echo "✅ 守卫通过：环境版本符合要求 (26.04)"
           echo "🔍 clang++ 实际指向 : $(readlink -f "$(command -v clang++)" 2>/dev/null)"
           echo "🔍 clang++ 版本     : $(clang++ --version 2>/dev/null | head -1)"
           echo "🔍 gcc 版本         : $(gcc --version 2>/dev/null | head -1)"

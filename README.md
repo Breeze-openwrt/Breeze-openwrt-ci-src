@@ -16,6 +16,10 @@
 固件产物发布在 [Releases](https://github.com/Breeze-openwrt/Breeze-openwrt-ci-src/releases)，每个版本包含
 `immortalwrt-qualcommax-ipq60xx-<设备>-squashfs-sysupgrade.bin`、`-squashfs-factory.bin` 与 `-initramfs-uImage.itb`。
 
+> **构建环境已固定为 `ubuntu-26.04`**（预装 clang 21 / gcc 15 / python 3.14）。
+> 流水线内置硬守卫：runner 版本不是 26.04 会在第一分钟直接中止。
+> `ubuntu-22.04` 已永久放弃——其预装的 clang 14 不支持 gn 需要的 `-std=c++23`。
+
 ## 4.v2raya使用前配置
 ```bash
 # For advanced usage, please see /etc/config/v2raya
