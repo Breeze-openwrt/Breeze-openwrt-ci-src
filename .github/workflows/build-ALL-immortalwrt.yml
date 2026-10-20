@@ -324,9 +324,26 @@ jobs:
           #   libexec/  → cc1 / collect2 / lto1 等后端程序
           # 这些正是 ccache compiler_check（mtime 或 content）要哈希的对象。
           # 其余文件（库、头文件、工具）照常 touch，它们不参与编译器指纹。
-          find openwrt/staging_dir -type f \
-            ! -path "*/target-*/bin/*" ! -path "*/target-*/libexec/*" \
+          #
+          # ⚠️ 重要修正：原来这里写的是固定通配
+          #      ! -path "*/target-*/bin/*" ! -path "*/target-*/libexec/*"
+          # 但实测在本仓库的结构下【一个都没匹配到】（探针报「没找到 target gcc」，
+          # 说明目录名/层级与假设不符）→ 排除等于没做，编译器照样被 touch。
+          # 现在改成：先把参与编译器指纹的二进制【实际路径】探测出来，再逐个排除。
+          CC_BIN_LIST=$(find openwrt/staging_dir -type f \
+            \( -name '*-gcc' -o -name '*-g++' -o -name '*-cpp' -o -name 'cc1' \
+               -o -name 'cc1plus' -o -name 'collect2' -o -name 'lto1' \
+               -o -name 'lto-wrapper' -o -name '*-ld' -o -name 'as' -o -name 'ar' \) 2>/dev/null)
+          _EXCL=$(echo "$CC_BIN_LIST" | grep -c . || true)
+          _ALL=$(find openwrt/staging_dir -type f 2>/dev/null | wc -l)
+          echo "🔍 探测到参与编译器指纹的二进制 $_EXCL 个（staging_dir 文件总数 $_ALL）"
+          echo "$CC_BIN_LIST" | head -8 | sed 's/^/     /'
+          _PRUNE=""
+          for f in $CC_BIN_LIST; do _PRUNE="$_PRUNE -not -path $f"; done
+          # shellcheck disable=SC2086
+          find openwrt/staging_dir -type f $_PRUNE \
             -exec touch -h {} + 2>/dev/null || true
+          echo "✅ 已 touch staging_dir 中的 $_ALL 个文件（其中 $_EXCL 个编译器相关二进制保持原状）"
           # 💡 为什么【不】用「只 touch stamp」：那会让 make 有机会重编交叉工具链，
           #    稳定能用是第一优先级，不能为了 ccache 命中率去冒重编的风险。
           echo "✅ Time Magic 完成：工具链时间戳已刷新（编译器二进制保持原状，ccache 指纹稳定）"
@@ -603,9 +620,16 @@ jobs:
             echo "⚠️ 没找到 ccache 可执行文件，跳过探针"
             exit 0
           fi
-          TARGET_CC=$(ls -1 "$GITHUB_WORKSPACE"/openwrt/staging_dir/target-*/bin/*-gcc 2>/dev/null | head -1)
+          # 🗂️ 先把 staging_dir 的结构向天打出来，一条命令就能看懂真实结构，
+          #    避免再出现「找不到 gcc 就悄悄绕过去」的黑盒。
+          echo "🗂️ staging_dir 结构："
+          ls -1 "$GITHUB_WORKSPACE"/openwrt/staging_dir/ 2>/dev/null | sed 's/^/     /'
+          # 用 find 搜索而不是固定通配：目录名/层级会随 OpenWrt 版本变，
+          # 固定写法很容易超出匹配范围（本轮就因此没找到 gcc）。
+          TARGET_CC=$(find "$GITHUB_WORKSPACE"/openwrt/staging_dir -maxdepth 3 -type f \
+            \( -name '*-gcc' -o -name '*-g++' \) 2>/dev/null | head -1)
           if [ -z "$TARGET_CC" ]; then
-            echo "⚠️ 没找到 target gcc，跳过探针"
+            echo "⚠️ 没找到 target gcc，跳过探针（上面已打出目录结构，可据此修正匹配方式）"
             exit 0
           fi
           echo "🔍 探针目标 gcc: $TARGET_CC"
