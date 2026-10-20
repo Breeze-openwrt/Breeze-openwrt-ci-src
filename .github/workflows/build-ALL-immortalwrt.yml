@@ -568,8 +568,135 @@ jobs:
         run: |
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
+      - name: 🩺 ccache 行为探针（秒级根因定位）
+        # 🛡️ 不再靠「清空→积累→测量」盲跑两轮，而是在同一轮里用真实的 target gcc
+        #    做四组对照实验，几十秒就能定位到是哪一个因素在造成 miss。
+        # 需要真实的 target gcc（ccache 本身也是编译出来的），所以必须放在编译之后。
+        if: always()
+        run: |
+          set +e
+          CCACHE_BIN="$GITHUB_WORKSPACE/openwrt/staging_dir/host/bin/ccache"
+          export CCACHE_DIR="$GITHUB_WORKSPACE/openwrt/.ccache"
+          if [ ! -x "$CCACHE_BIN" ]; then
+            echo "⚠️ 没找到 ccache 可执行文件，跳过探针"
+            exit 0
+          fi
+          TARGET_CC=$(ls -1 "$GITHUB_WORKSPACE"/openwrt/staging_dir/target-*/bin/*-gcc 2>/dev/null | head -1)
+          if [ -z "$TARGET_CC" ]; then
+            echo "⚠️ 没找到 target gcc，跳过探针"
+            exit 0
+          fi
+          echo "🔍 探针目标 gcc: $TARGET_CC"
+          echo "🔍 ccache: $("$CCACHE_BIN" --version 2>/dev/null | head -1)"
+          mkdir -p /tmp/bzprobe && cd /tmp/bzprobe || exit 0
+          # 每个场景前后各读一次 Hits 计数，作差值就是该场景的命中数。
+          # 注：ccache -s 里有两个 Hits 行（Cacheable calls 块 + Local storage 块），必须 head -1 只取第一个。
+          HITS() { "$CCACHE_BIN" -s 2>/dev/null | grep -oE 'Hits: +[0-9]+' | head -1 | grep -oE '[0-9]+'; }
+          cat > p.c <<'EOF'
+          int bz_probe(int x) { return x * 3 + 1; }
+          EOF
+          echo "===== 场景 A：轮内一致性（同一文件连编两次，第二次必须 hit）====="
+          h0=$(HITS)
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -c p.c -o a1.o >/dev/null 2>&1
+          h1=$(HITS)
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -c p.c -o a2.o >/dev/null 2>&1
+          h2=$(HITS)
+          echo "  第1次增量=$((h1-h0))  第2次增量=$((h2-h1))"
+          if [ $((h2-h1)) -gt 0 ]; then echo "  ✅ ccache 工作正常"; else echo "  ⚠️ 轮内都不 hit → ccache 基本未生效"; fi
+          echo "===== 场景 B：compiler_check 实际影响（必须用 NODIRECT 迫走 preprocessor mode）====="
+          # ⚠️ 三个关键要点（本地实测出来的坑）：
+          #   ① ccache 的 direct mode（直接模式）命中时【不会检查编译器指纹】，
+          #      所以不加 CCACHE_NODIRECT=1 就测不出 compiler_check 的影响。
+          #   ② B1 与 B2 必须用【不同源文件】，否则前一个场景写进去的条目
+          #      会被后一个场景取用，测的就不是本场景的行为。
+          #   ③ touch 要同时覆盖 symlink 本身与其指向的真实二进制，
+          #      否则 ccache 记录的那个路径可能没被改动，指纹保持不变。
+          REAL_CC=$(readlink -f "$TARGET_CC" 2>/dev/null || echo "$TARGET_CC")
+          touch_compiler() {
+            touch -m "$TARGET_CC" 2>/dev/null || true
+            [ "$REAL_CC" != "$TARGET_CC" ] && touch -m "$REAL_CC" 2>/dev/null || true
+            sleep 1
+          }
+          # --- B1：mtime 判定 ---
+          cat > m1.c <<'EOF'
+          int bz_m1(int x) { return x * 5 + 2; }
+          EOF
+          CCACHE_NODIRECT=1 CCACHE_COMPILERCHECK=mtime "$CCACHE_BIN" "$TARGET_CC" -O2 -c m1.c -o m1a.o >/dev/null 2>&1
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -c m1.c -o m1b.o >/dev/null 2>&1
+          touch_compiler
+          h0=$(HITS)
+          CCACHE_NODIRECT=1 CCACHE_COMPILERCHECK=mtime "$CCACHE_BIN" "$TARGET_CC" -O2 -c m1.c -o m1c.o >/dev/null 2>&1
+          h1=$(HITS)
+          echo "  B1 touch 后 + mtime 判定（preprocessor mode）增量=$((h1-h0))（指纹随事件变就 miss → 应为 0）"
+          # --- B2：content 判定（独立源文件 m2.c）---
+          cat > m2.c <<'EOF'
+          int bz_m2(int x) { return x * 7 + 3; }
+          EOF
+          CCACHE_NODIRECT=1 CCACHE_COMPILERCHECK=content "$CCACHE_BIN" "$TARGET_CC" -O2 -c m2.c -o m2a.o >/dev/null 2>&1
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -c m2.c -o m2b.o >/dev/null 2>&1
+          touch_compiler
+          h0=$(HITS)
+          CCACHE_NODIRECT=1 CCACHE_COMPILERCHECK=content "$CCACHE_BIN" "$TARGET_CC" -O2 -c m2.c -o m2c.o >/dev/null 2>&1
+          h1=$(HITS)
+          echo "  B2 touch 后 + content 判定（preprocessor mode）增量=$((h1-h0))（内容未变 → 应然 hit）"
+          echo "  → 若 B1=0 且 B2=1：content 判定正确解决了指纹不稳问题"
+          echo "===== 场景 E：direct mode 是否工作（OpenWrt 的大敌）====="
+          h0=$(HITS)
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -c p.c -o e1.o >/dev/null 2>&1
+          h1=$(HITS)
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -c p.c -o e2.o >/dev/null 2>&1
+          h2=$(HITS)
+          echo "  默认（direct 可能生效）第2次增量=$((h2-h1))；下面用 NODIRECT 对照"
+          h0=$(HITS)
+          CCACHE_NODIRECT=1 "$CCACHE_BIN" "$TARGET_CC" -O2 -c p.c -o e3.o >/dev/null 2>&1
+          h1=$(HITS)
+          echo "  NODIRECT=1（preprocessor mode）增量=$((h1-h0))（为 0 则 preprocessor mode 完全不能命中）"
+          echo "===== 场景 C：__DATE__ / __TIME__ 宏是否自动定义不可缓存====="
+          cat > d.c <<'EOF'
+          const char* bz_d = __DATE__ " " __TIME__;
+          int bz_probe2(int x) { return x + (int)bz_d[0]; }
+          EOF
+          h0=$(HITS)
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -c d.c -o c1.o >/dev/null 2>&1
+          h1=$(HITS)
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -c d.c -o c2.o >/dev/null 2>&1
+          h2=$(HITS)
+          echo "  第1次增量=$((h1-h0))  第2次增量=$((h2-h1))（若第2次仍为 0 → DATE 宏是 miss 杀手）"
+          echo "===== 场景 D：头文件搜索路径变化（验证 base_dir 归一化）====="
+          mkdir -p inc1 inc2
+          echo "int bz_h;" > inc1/h.h
+          echo "int bz_h;" > inc2/h.h
+          h0=$(HITS)
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -Iinc1 -c p.c -o d1.o >/dev/null 2>&1
+          h1=$(HITS)
+          "$CCACHE_BIN" "$TARGET_CC" -O2 -Iinc2 -c p.c -o d2.o >/dev/null 2>&1
+          h2=$(HITS)
+          echo "  第1次增量=$((h1-h0))  第2次增量=$((h2-h1))（若第2次为 0 → 路径未归一化）"
+          echo "===== 探针总结 ====="
+          echo "  A 轮内一致性 / B mtime 假说 / C DATE 宏 / D 路径归一化 —— 见上面各场景的增量数"
+
       - name: Check space usage # 🔍 硬盘体检
         run: df -hT
+
+      - name: 🧹 Prune old artifacts # 🧹 清理陈旧 artifact，防止仓库存储无限膨胀
+        # 本仓库每个 artifact 近 600 MB，攒着不动很快就是十几 GB。
+        # 保留最近 3 轮的 bin + 固件包（够下载回溯），更旧的直接删。
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          KEEP=3
+          for PREFIX in OpenWrt_bin OpenWrt_Custom_firmware_Package; do
+            IDS=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+              --jq "[.artifacts[] | select(.name | startswith(\"$PREFIX\"))] | sort_by(.created_at) | reverse | .[$KEEP:] | .[].id" 2>/dev/null || true)
+            for ID in $IDS; do
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$ID" >/dev/null 2>&1 \
+                && echo "   🗑️ 已删除陈旧 artifact $ID" || echo "   ⚠️ 删除失败 $ID（忽略）"
+            done
+          done
+          echo "🧹 当前剩余 artifact："
+          gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | "   \(.name)  \(.size_in_bytes/1048576*100|floor/100) MB"' 2>/dev/null || true
 
       - name: Upload bin directory # 📦 收废品（收集所有安装包）
         uses: actions/upload-artifact@v6
@@ -578,6 +705,8 @@ jobs:
         with:
           name: OpenWrt_bin${{ env.FILE_DATE }}
           path: openwrt/bin
+          # 保留 14 天即可（默认 90 天太久了，本仓库 artifact 单个近 600MB）
+          retention-days: 14
 
       - name: Organize ALL output files # 🧲 万磁王：全范围收割成品刷机包
         id: organize
@@ -611,6 +740,7 @@ jobs:
         if: steps.organize.outputs.status == 'success'
         with:
           name: OpenWrt_Custom_firmware_Package${{ env.FILE_DATE }}
+          retention-days: 14
           path: ${{ env.FIRMWARE }}
 
       - name: Generate release tag
