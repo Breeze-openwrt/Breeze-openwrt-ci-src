@@ -34,13 +34,13 @@
 
 name: ✨ Build ALL Optional (Yashe & Taiyi) # 🏷️ 给这份新工作流起个闪亮的名字，好在 Actions 列表区分
 
-# 🛡️【并发闸门】同一时间只允许一个构建在跑。
-#    手动连点、或定时任务与手动任务撞车时，后来的排队等位，
-#    避免多个 job 互抢 CPU/网络/缓存把额度烧掉。
-#    cancel-in-progress: false —— 已开始的构建不打断，让它跑完出固件。
+# 🛡️【并发闸门】schedule 和 dispatch 分组隔离，dispatch 连点自动顶掉旧的。
+#    之前 group 只有 workflow+ref，后来的排队等位，手动连点 3 次就堆 3 个 2 小时任务。
+#    现在按 event_name 拆组：定时和手动互不挡；dispatch 组内 cancel-in-progress:true，
+#    新点一次自动取消上一轮未跑完的 dispatch，不用手动去掐，省额度。
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
 
 on:
   repository_dispatch:
@@ -149,6 +149,7 @@ jobs:
           df -hT
 
       - name: Initialization environment # 3️⃣：熬底汤 - 装载海量交叉编译需要的支持库（这是在装车间机器）
+        timeout-minutes: 20 # 🛡️ #156 曾在这步卡 1h53m 不报错，直接超时失败别烧额度
         env:
           DEBIAN_FRONTEND: noninteractive # 🤖【机器人模式光环】: 有任何弹窗问“是/否”一律默认执行免卡死模式！
         run: |
@@ -162,8 +163,15 @@ jobs:
           # ✨ 性能狂魔绝杀：合并 60 余行垃圾冗余重复的安装指令，解放服务器 I/O！
           # GitHub Action 的新机器其实已经很干净了，不需要上来先全盘跑好几圈升级（纯浪费生命）。
           # 🛡️ 终极屏蔽：强制切断所有 --no-install-recommends (不下载配套教程和无用推流模块，只装干货核心)，再减几分钟体积！
-          sudo -E apt-get -qq update
-          sudo -E apt-get -qq install -y --no-install-recommends \
+          # 🛡️ apt 加固：26.04 resolute 滚动源会抖，裸跑 update+install 一抖就卡死（#156）。
+          #    3 次重试 + Acquire 重试 + fix-missing，去掉 -qq 保证红字可见。
+          for i in 1 2 3; do
+            sudo -E apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 --allow-releaseinfo-change && break
+            echo "⚠️ apt-get update 第 $i 次失败，15s 后重试..."
+            sleep 15
+          done
+          sudo -E apt-get install -y --no-install-recommends --fix-missing \
+            -o Acquire::Retries=3 -o Acquire::http::Timeout=60 \
             eatmydata ack antlr3 asciidoc autoconf automake autopoint binutils bison \
             build-essential bzip2 cargo ccache cdrkit-doc clang cmake cpio curl dejagnu \
             device-tree-compiler dos2unix ecj expect fastjar flex g++ g++-multilib gawk gcc \
@@ -278,6 +286,7 @@ jobs:
           fi
 
       - name: Restore Toolchain Cache # 🧰 尝试拉取巨无霸重工制造机！
+        timeout-minutes: 15 # 🛡️ 恢复超过15分钟不如重编（20-30分钟），别学#157卡40分钟
         # 🛡️【史诗级大坑修复7】toolchain 缓存必须【按 runner 版本隔离】！
         #    staging_dir/host/bin/ 下大量是指向系统路径的符号链接
         #    （例如 python3 -> /usr/bin/python3.10）。跨 Ubuntu 大版本复用缓存时，
@@ -357,6 +366,7 @@ jobs:
           fi
 
       - name: Restore Ccache directory # 🧲 C++ 编译碎片金库：尝试拉取老本！
+        timeout-minutes: 15 # 🛡️ #157 在这步卡40分钟，超时直接走干净编译别等
         # 🛡️ 只有当用户勾选了复用缓存，【且当前绝非自动计划任务(schedule)】时，我们才去取云端干粮。
         #    如果是按照日历设定的定时构建，它会强行跳过此步变成假环境(False)，从头开始砸碎重炼一炉100%纯净的新缓存！
         if: github.event_name != 'schedule' && (github.event.inputs.use_ccache == 'true' || github.event.inputs.use_ccache == '')
@@ -540,6 +550,7 @@ jobs:
       # ================== 👇 核心火力烹饪环节 ==================
       - name: Compile the Yashe firmware # 🍳 Yashe 开煮！
         id: compile_yashe
+        timeout-minutes: 180 # 🛡️ 编译主体最长3小时，超时 fail 比无限 cancel 好定位
         # 🛡️ 【关键修复】：确保自动任务运行时，厨师(编译引擎)不会因为没看到勾选单而罢工。
         if: github.event_name == 'schedule' || github.event.inputs.build_yashe == 'true'
         run: |
@@ -573,6 +584,7 @@ jobs:
 
       - name: Compile the Taiyi firmware # 🍳 Taiyi 开煮！如果我们上面全勾选，这波因为蹭了饭（环境共用），它将光速完工！
         id: compile_taiyi
+        timeout-minutes: 60 # 🛡️ Taiyi 正常5分钟，60分钟没完就是环境坏了
         # 🛡️ 【关键修复】：Taiyi 作为共用架构，在定时任务时也应一并产出，白嫖前面产生的交叉编译工具链。
         if: github.event_name == 'schedule' || github.event.inputs.build_taiyi == 'true'
         run: |
@@ -872,6 +884,7 @@ jobs:
 
       - name: Save Updated Toolchain # 💾 供奉新一代重工制造机！
         if: success()
+        timeout-minutes: 15 # 🛡️ 上传4GB+超时直接失败，别卡到job 6小时上限
         uses: actions/cache/save@v5
         with:
           path: openwrt/staging_dir
@@ -898,6 +911,7 @@ jobs:
       - name: Save Updated Ccache # 💾 保存并升级金库！
         # 无论前面是读了旧缓存后更新的，还是全新生成的，我们最后都统一把它当做 latest 供奉到云端！
         if: success()
+        timeout-minutes: 15 # 🛡️ 同上，上传卡死直接失败
         uses: actions/cache/save@v5
         with:
           path: openwrt/.ccache
